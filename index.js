@@ -993,6 +993,7 @@ async function run() {
             const filter = { _id: new ObjectId(id) };
             const options = { upsert: true };
             const Data = req.body;
+            console.log(Data.discount)
             const voucher = {
                 date: Data.date,
                 voucher_no: String(Data.voucher_no),
