@@ -1000,14 +1000,15 @@ async function run() {
                 total: Data.total,
                 paid_amount: Data.paid_amount,
                 due_amount: Data.due_amount,
-                payment_status: Data.payment_status
+                payment_status: Data.payment_status,
+                discount: Data.discount
             }
             try {
                 const client = await clientCornerCollection.findOne(filter);
 
                 // Step 1: If length > 19, remove first transection
-                if (client?.voucher?.length > 10) {
-                    await clientCornerCollection.updateOne(filter, { $pop: { voucher: -1 } }); // remove first
+                if (client?.vouchers?.length > 10) {
+                    await clientCornerCollection.updateOne(filter, { $pop: { vouchers: -1 } }); // remove first
                 }
                 const result = await clientCornerCollection.updateOne(
                     filter,
@@ -1043,7 +1044,8 @@ async function run() {
                         $set: {
                             'vouchers.$.paid_amount': Data.paid_amount,
                             'vouchers.$.due_amount': Data.due,
-                            'vouchers.$.payment_status': Data.payment_status
+                            'vouchers.$.payment_status': Data.payment_status,
+                            'vouchers.$.discount': Data.discount
                         }, $push: { transections: transection }
                     }
                 );
