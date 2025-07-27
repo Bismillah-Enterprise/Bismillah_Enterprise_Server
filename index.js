@@ -996,7 +996,7 @@ async function run() {
             console.log(Data.discount)
             const voucher = {
                 date: Data.date,
-                voucher_no: Data.voucher_no,
+                voucher_no: String(Data.voucher_no),
                 products: Data.products,
                 total: Data.total,
                 paid_amount: Data.paid_amount,
