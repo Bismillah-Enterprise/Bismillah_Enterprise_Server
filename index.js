@@ -516,7 +516,7 @@ async function run() {
                         additional_movement_minute: 0
                     }
                 }
-                if (bodyData.today_exit1_time === '' && bodyData.today_exit2_time === '') {
+                if (bodyData.today_exit1_time === '' && bodyData.today_exit1_time === '' || bodyData.today_exit2_time === '') {
                     await staffsCollection.updateOne(filter, ErrorDoc, { upsert: true });
                     res.send({ message: 'Work time submitted successfully' });
                 }
