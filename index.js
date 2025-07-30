@@ -490,6 +490,7 @@ async function run() {
                         total_working_minute: bodyData.total_working_minute,
                         total_income: bodyData.total_income,
                         available_balance: bodyData.available_balance,
+                        today_date: bodyData.today_date,
                         today_enter1_time: '',
                         today_exit1_time: '',
                         today_enter2_time: '',
@@ -1112,6 +1113,71 @@ async function run() {
             });
             res.send(result);
         });
+        app.put('/change_time/:id', async (req, res) => {
+            const id = req.params.id;
+            const filter = { _id: new ObjectId(id) };
+            const bodyData = req.body;
+            console.log(filter, bodyData)
+            if (bodyData.name === 'today_enter1_time') {
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        today_enter1_time: bodyData.time,
+                    }
+                });
+                res.send(result);
+            }
+            if (bodyData.name === 'today_exit1_time') {
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        today_exit1_time: bodyData.time,
+                    }
+                });
+                res.send(result);
+            }
+            if (bodyData.name === 'today_enter2_time') {
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        today_enter2_time: bodyData.time,
+                    }
+                });
+                res.send(result);
+            }
+            if (bodyData.name === 'today_exit2_time') {
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        today_exit2_time: bodyData.time,
+                    }
+                });
+                res.send(result);
+            }
+        });
+
+        app.put('/clear_bonus', async (req, res) => {
+            const bodyData = req.body;
+            const existing = await staffBonusCollection.findOne({});
+            if (bodyData.name === 'first_entry') {
+                const result = await staffBonusCollection.updateOne(
+                    { _id: existing._id },
+                    {
+                        $set: {
+                            first_entry: { time: '', uid: '' },
+                        }
+                    }
+                );
+                res.send(result);
+            }
+            if (bodyData.name === 'second_entry') {
+                const result = await staffBonusCollection.updateOne(
+                    { _id: existing._id },
+                    {
+                        $set: {
+                            second_entry: { time: '', uid: '' },
+                        }
+                    }
+                );
+                res.send(result);
+            }
+        })
 
 
         await client.db("admin").command({ ping: 1 });
