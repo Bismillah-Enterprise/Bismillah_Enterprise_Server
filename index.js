@@ -483,6 +483,7 @@ async function run() {
 
             try {
                 // Update database: Push daily data & reset today's values
+                console.log(bodyData.today_date)
                 const updateDoc = {
                     $push: { current_month_details: todaySummary },
                     $set: {
@@ -504,6 +505,7 @@ async function run() {
                 };
                 const ErrorDoc = {
                     $set: {
+                        today_date: bodyData.today_date,
                         today_enter1_time: '',
                         today_exit1_time: '',
                         today_enter2_time: '',
