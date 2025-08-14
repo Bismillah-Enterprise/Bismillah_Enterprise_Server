@@ -47,14 +47,14 @@ async function run() {
         const tokenCollection = client.db('Bismillah_Enterprise').collection('tokens');
 
         app.get("/shop_code", async (req, res) => {
-            const shopCode = await shopCodeCollection.find().toArray();
+            const shopCode = await shopCodeCollection.findOne({});
             res.send(shopCode);
         })
         app.post('/shop_code', async (req, res) => {
             const options = { upsert: true };
             const updatedCode = req.body;
             try {
-                const existing = await shopLocationCollection.findOne({});
+                const existing = await shopCodeCollection.findOne({});
                 if (existing) {
                     await shopCodeCollection.updateOne(
                         { _id: existing._id },
