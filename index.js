@@ -735,7 +735,6 @@ async function run() {
         app.put('/staff_bonus', async (req, res) => {
             const entryData = req.body;
             const existing = await staffBonusCollection.findOne({});
-
             if (entryData.entry_type === 'new day') {
                 const result = await staffBonusCollection.updateOne(
                     { _id: existing._id },
@@ -759,14 +758,14 @@ async function run() {
                     if (modifier === 'AM' && hours === 12) hours = 0;
                     return hours * 60 + minutes;
                 };
-                if (parseTime(entryData.time) < 480) {
+                if (parseTime(entryData.time) < existing.start_time) {
                     const result = await staffBonusCollection.updateOne(
                         { _id: existing._id },
                         { $set: { first_entry: { time: '8:00 AM', uid: entryData.uid } } }
                     );
                     res.send(result);
                 }
-                if (parseTime(entryData.time) > 480 && parseTime(entryData.time) < 510) {
+                if (parseTime(entryData.time) > existing.start_time && parseTime(entryData.time) < existing.end_time) {
                     const result = await staffBonusCollection.updateOne(
                         { _id: existing._id },
                         { $set: { first_entry: { time: entryData.time, uid: entryData.uid } } }
@@ -781,6 +780,15 @@ async function run() {
                 );
                 res.send(result);
             }
+        })
+        app.patch('/set_bonus_time', async (req, res) => {
+            const { start_time, end_time } = req.body;
+            const existing = await staffBonusCollection.findOne({});
+            const result = await staffBonusCollection.updateOne(
+                { _id: existing._id },
+                { $set: { start_time, end_time } }
+            );
+            res.send(result);
         })
         app.get('/self_transections', async (req, res) => {
             const result = await selfTransectionsCollection.find().toArray();
