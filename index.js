@@ -1307,7 +1307,7 @@ async function run() {
         })
         app.patch('/daily_revenue_transactions', async (req, res) => {
             const trData = req.body;
-            const { amount, category } = trData;
+            const { date, amount, category } = trData;
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
 
@@ -1317,6 +1317,9 @@ async function run() {
                     {
                         $inc: {
                             computer_revenues: amount
+                        },
+                        $set: {
+                            date: date
                         }
                     }
                 )
@@ -1327,6 +1330,9 @@ async function run() {
                     {
                         $inc: {
                             stationary_revenues: amount
+                        },
+                        $set: {
+                            date: date
                         }
                     }
                 )
@@ -1337,6 +1343,9 @@ async function run() {
                     {
                         $inc: {
                             photocopy_revenues: amount
+                        },
+                        $set: {
+                            date: date
                         }
                     }
                 )
@@ -1347,6 +1356,9 @@ async function run() {
                     {
                         $inc: {
                             others_revenues: amount
+                        },
+                        $set: {
+                            date: date
                         }
                     }
                 )
@@ -1355,13 +1367,18 @@ async function run() {
         })
         app.patch('/daily_expense_transactions', async (req, res) => {
             const trData = req.body;
+            const { date, amount, comment } = trData;
+            const exData = {amount, comment}
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
             const result = await dailyTransactionsCollection.updateOne(
                 filter,
                 {
                     $push: {
-                        expenses: trData
+                        expenses: exData
+                    },
+                    $set: {
+                        date: date
                     }
                 }
             )
@@ -1385,7 +1402,7 @@ async function run() {
                         stationary_revenues: category === 'Stationary' ? update_info?.amount : 0,
                         photocopy_revenues: category === 'Photocopy' ? update_info?.amount : 0,
                         others_revenues: category === 'Others' ? update_info?.amount : 0,
-                        expenses: category === 'Expense' ? [{amount: update_info?.amount, comment: update_info?.comment}] : []
+                        expenses: category === 'Expense' ? [{ amount: update_info?.amount, comment: update_info?.comment }] : []
                     }
                 }
             )
