@@ -12,7 +12,8 @@ require('dotenv').config();
 app.use(cors());
 app.use(express.json());
 
-const localUri = `mongodb://127.0.0.1:27017/Bismillah_Enterprise`
+const localUri = ``
+// const localUri = `mongodb://127.0.0.1:27017/Bismillah_Enterprise`
 const atlasUri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@bismillahenterpriseclus.eoxgyuj.mongodb.net/?retryWrites=true&w=majority&appName=BismillahEnterpriseCluster`;
 
 // Testing to connect ofline serer
@@ -33,15 +34,15 @@ async function connectDB() {
         console.log("Trying to connect to local MongoDB....");
         client = createClient(localUri);
         await client.connect();
-        await client.db('admin').command({ ping: 1});
+        await client.db('admin').command({ ping: 1 });
         console.log("Connected to Local MongoDB");
     }
-    catch(localError) {
+    catch (localError) {
         console.warn(" Local MongoDB not found. Switching to MOngoDB Atlas....");
         try {
             client = createClient(atlasUri);
             await client.connect();
-            await client.db('admin').command({ping: 1});
+            await client.db('admin').command({ ping: 1 });
             console.log("Connected to MongoDB Atlas");
         }
         catch (atlasError) {
@@ -87,11 +88,13 @@ async function run() {
         const voucherSlCollection = client.db('Bismillah_Enterprise').collection('voucher_sl_no');
         const productsCollection = client.db('Bismillah_Enterprise').collection('products');
         const tokenCollection = client.db('Bismillah_Enterprise').collection('tokens');
+        const dailyTransactionsCollection = client.db('Bismillah_Enterprise').collection('daily_transactions');
 
         app.get("/shop_code", async (req, res) => {
             const shopCode = await shopCodeCollection.findOne({});
             res.send(shopCode);
         })
+
         app.post('/shop_code', async (req, res) => {
             const options = { upsert: true };
             const updatedCode = req.body;
@@ -1293,6 +1296,101 @@ async function run() {
             }
         });
 
+        app.get('/daily_transactions', async (req, res) => {
+            try {
+                const result = await dailyTransactionsCollection.findOne({});
+                res.send(result);
+            } catch (error) {
+                console.log(error)
+                res.status(500).send({ error: 'Update failed', details: error });
+            }
+        })
+        app.patch('/daily_revenue_transactions', async (req, res) => {
+            const trData = req.body;
+            const { amount, category } = trData;
+            const existing = await dailyTransactionsCollection.findOne({});
+            const filter = { _id: existing._id };
+
+            if (category === 'Computer') {
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $inc: {
+                            computer_revenues: amount
+                        }
+                    }
+                )
+                res.send(result);
+            } else if (category === 'Stationary') {
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $inc: {
+                            stationary_revenues: amount
+                        }
+                    }
+                )
+                res.send(result);
+            } else if (category === 'Photocopy') {
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $inc: {
+                            photocopy_revenues: amount
+                        }
+                    }
+                )
+                res.send(result);
+            } else if (category === 'Others') {
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $inc: {
+                            others_revenues: amount
+                        }
+                    }
+                )
+                res.send(result);
+            }
+        })
+        app.patch('/daily_expense_transactions', async (req, res) => {
+            const trData = req.body;
+            const existing = await dailyTransactionsCollection.findOne({});
+            const filter = { _id: existing._id };
+            const result = await dailyTransactionsCollection.updateOne(
+                filter,
+                {
+                    $push: {
+                        expenses: trData
+                    }
+                }
+            )
+            res.send(result);
+        })
+        app.patch('/reset_daily_transactions', async (req, res) => {
+            const receivedData = req.body;
+            const { update_info, category, date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions } = receivedData;
+            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions }
+            const existing = await dailyTransactionsCollection.findOne({});
+            const filter = { _id: existing._id };
+            const result = await dailyTransactionsCollection.updateOne(
+                filter,
+                {
+                    $push: {
+                        summary: trData
+                    },
+                    $set: {
+                        date: update_info?.update_date,
+                        computer_revenues: category === 'Computer' ? update_info?.amount : 0,
+                        stationary_revenues: category === 'Stationary' ? update_info?.amount : 0,
+                        photocopy_revenues: category === 'Photocopy' ? update_info?.amount : 0,
+                        others_revenues: category === 'Others' ? update_info?.amount : 0,
+                        expenses: category === 'Expense' ? [{amount: update_info?.amount, comment: update_info?.comment}] : []
+                    }
+                }
+            )
+            res.send(result);
+        })
 
         await client.db("admin").command({ ping: 1 });
     } finally {
