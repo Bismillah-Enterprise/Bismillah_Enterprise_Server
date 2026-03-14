@@ -1307,7 +1307,7 @@ async function run() {
         })
         app.patch('/daily_revenue_transactions', async (req, res) => {
             const trData = req.body;
-            const { date, amount, category } = trData;
+            const { date, amount, category, comment } = trData;
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
 
@@ -1354,8 +1354,8 @@ async function run() {
                 const result = await dailyTransactionsCollection.updateOne(
                     filter,
                     {
-                        $inc: {
-                            others_revenues: amount
+                        $push: {
+                            others_revenues: {amount, comment}
                         },
                         $set: {
                             date: date
@@ -1368,7 +1368,7 @@ async function run() {
         app.patch('/daily_expense_transactions', async (req, res) => {
             const trData = req.body;
             const { date, amount, comment } = trData;
-            const exData = {amount, comment}
+            const exData = { amount, comment }
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
             const result = await dailyTransactionsCollection.updateOne(
@@ -1401,7 +1401,7 @@ async function run() {
                         computer_revenues: category === 'Computer' ? update_info?.amount : 0,
                         stationary_revenues: category === 'Stationary' ? update_info?.amount : 0,
                         photocopy_revenues: category === 'Photocopy' ? update_info?.amount : 0,
-                        others_revenues: category === 'Others' ? update_info?.amount : 0,
+                        others_revenues: category === 'Others' ? [{ amount: update_info?.amount, comment: update_info?.comment }] : [],
                         expenses: category === 'Expense' ? [{ amount: update_info?.amount, comment: update_info?.comment }] : []
                     }
                 }
