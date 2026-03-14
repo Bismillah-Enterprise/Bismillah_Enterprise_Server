@@ -1408,6 +1408,43 @@ async function run() {
             )
             res.send(result);
         })
+        app.patch('/close_daily_transactions', async (req, res) => {
+            const receivedData = req.body;
+            const { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions } = receivedData;
+            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions }
+            const existing = await dailyTransactionsCollection.findOne({});
+            const filter = { _id: existing._id };
+            const result = await dailyTransactionsCollection.updateOne(
+                filter,
+                {
+                    $push: {
+                        summary: trData
+                    },
+                    $set: {
+                        computer_revenues: 0,
+                        stationary_revenues: 0,
+                        photocopy_revenues: 0,
+                        others_revenues: 0,
+                        expenses: []
+                    }
+                }
+            )
+            res.send(result);
+        })
+        app.patch('/update_expenses', async (req, res) => {
+            const receivedData = req.body;
+            const existing = await dailyTransactionsCollection.findOne({});
+            const filter = { _id: existing._id };
+            const result = await dailyTransactionsCollection.updateOne(
+                filter,
+                {
+                    $set: {
+                        expenses: receivedData
+                    }
+                }
+            )
+            res.send(result);
+        })
 
         await client.db("admin").command({ ping: 1 });
     } finally {
