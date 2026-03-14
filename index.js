@@ -1355,7 +1355,7 @@ async function run() {
                     filter,
                     {
                         $push: {
-                            others_revenues: {amount, comment}
+                            others_revenues: { amount, comment }
                         },
                         $set: {
                             date: date
@@ -1386,8 +1386,8 @@ async function run() {
         })
         app.patch('/reset_daily_transactions', async (req, res) => {
             const receivedData = req.body;
-            const { update_info, category, date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions } = receivedData;
-            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions }
+            const { update_info, category, date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses } = receivedData;
+            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses }
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
             const result = await dailyTransactionsCollection.updateOne(
@@ -1410,8 +1410,8 @@ async function run() {
         })
         app.patch('/close_daily_transactions', async (req, res) => {
             const receivedData = req.body;
-            const { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions } = receivedData;
-            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses, expense_descriptions }
+            const { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses} = receivedData;
+            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses }
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
             const result = await dailyTransactionsCollection.updateOne(
@@ -1424,7 +1424,7 @@ async function run() {
                         computer_revenues: 0,
                         stationary_revenues: 0,
                         photocopy_revenues: 0,
-                        others_revenues: 0,
+                        others_revenues: [],
                         expenses: []
                     }
                 }
@@ -1435,15 +1435,27 @@ async function run() {
             const receivedData = req.body;
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
-            const result = await dailyTransactionsCollection.updateOne(
-                filter,
-                {
-                    $set: {
-                        expenses: receivedData
+            if (receivedData?.category === 'expenses') {
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $set: {
+                            expenses: receivedData?.update
+                        }
                     }
-                }
-            )
-            res.send(result);
+                )
+                res.send(result);
+            } else if (receivedData?.category === 'others_revenues') {
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $set: {
+                            others_revenues: receivedData?.update
+                        }
+                    }
+                )
+                res.send(result);
+            }
         })
 
         await client.db("admin").command({ ping: 1 });
