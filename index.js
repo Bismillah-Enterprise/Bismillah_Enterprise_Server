@@ -1410,7 +1410,7 @@ async function run() {
         })
         app.patch('/close_daily_transactions', async (req, res) => {
             const receivedData = req.body;
-            const { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses} = receivedData;
+            const { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses } = receivedData;
             const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses }
             const existing = await dailyTransactionsCollection.findOne({});
             const filter = { _id: existing._id };
@@ -1457,6 +1457,39 @@ async function run() {
                 res.send(result);
             }
         })
+        app.patch("/delete_summary", async (req, res) => {
+            try {
+
+                const { startDate, endDate } = req.body;
+
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+
+                const doc = await dailyTransactionsCollection.findOne({});
+
+                const filteredSummary = doc.summary.filter(item => {
+
+                    const itemDate = new Date(item.date);
+
+                    // keep items OUTSIDE the selected range
+                    return !(itemDate >= start && itemDate <= end);
+
+                });
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    {},
+                    {
+                        $set: { summary: filteredSummary }
+                    }
+                );
+
+                res.send(result);
+
+            } catch (error) {
+                console.log(error);
+                res.status(500).send({ error: "Delete failed" });
+            }
+        });
 
         await client.db("admin").command({ ping: 1 });
     } finally {
