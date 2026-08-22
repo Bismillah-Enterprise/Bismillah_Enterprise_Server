@@ -13,10 +13,7 @@ app.use(cors());
 app.use(express.json());
 
 const localUri = ``
-// const localUri = `mongodb://127.0.0.1:27017/Bismillah_Enterprise`
 const atlasUri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@bismillahenterpriseclus.eoxgyuj.mongodb.net/?retryWrites=true&w=majority&appName=BismillahEnterpriseCluster`;
-
-// Testing to connect ofline serer
 
 const createClient = (uri) =>
     new MongoClient(uri, {
@@ -51,25 +48,12 @@ async function connectDB() {
         }
     }
 }
-// End Testing to connect ofline serer
 
-
-
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
-// const client = new MongoClient(uri, {
-//     serverApi: {
-//         version: ServerApiVersion.v1,
-//         strict: true,
-//         deprecationErrors: true,
-//     }
-// });
 
 async function run() {
     try {
-        // Connect the client to the server	(optional starting in v4.7)
-        // await client.connect();
+
         await connectDB();
-        // Send a ping to confirm a successful connection
 
 
         const staffsCollection = client.db('Bismillah_Enterprise').collection('staffs');
@@ -92,9 +76,19 @@ async function run() {
         const colorplateCollection = client.db('Bismillah_Enterprise').collection('colorplate');
 
         app.get("/shop_code", async (req, res) => {
-            const shopCode = await shopCodeCollection.findOne({});
-            res.send(shopCode);
-        })
+            try {
+                const shopCode = await shopCodeCollection.findOne({});
+                res.send(shopCode);
+
+            } catch (err) {
+                console.error('API route error:', err);
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
+        });
+
         app.get('/colorplate/:serial', async (req, res) => {
             try {
                 const serial = Number(req.params.serial);
@@ -127,8 +121,10 @@ async function run() {
         app.post('/shop_code', async (req, res) => {
             const options = { upsert: true };
             const updatedCode = req.body;
+
             try {
                 const existing = await shopCodeCollection.findOne({});
+
                 if (existing) {
                     await shopCodeCollection.updateOne(
                         { _id: existing._id },
@@ -136,16 +132,25 @@ async function run() {
                         options
                     );
                 } else {
-                    await shopCodeCollection.insertOne({ shop_code: updatedCode.shop_code });
+                    await shopCodeCollection.insertOne({
+                        shop_code: updatedCode.shop_code
+                    });
                 }
+
                 res.send({ message: 'shop code set successfully' });
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err
+                });
             }
         });
+
         app.put('/additional_request_approve/:uid', async (req, res) => {
             const uid = req.params.uid;
-            console.log(uid)
+            console.log(uid);
+
             const filter = { uid: uid };
 
             const updatedStatus = req.body;
@@ -172,181 +177,333 @@ async function run() {
                 });
             }
         });
+
         app.get("/staffs", async (req, res) => {
-            const staffs = await staffsCollection.find().toArray();
-            res.send(staffs);
+            try {
+                const staffs = await staffsCollection.find().toArray();
+                res.send(staffs);
+
+            } catch (err) {
+                console.error('API route error:', err);
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.get("/staff/:id", async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const staff = await staffsCollection.find(query).toArray();
-            if (staff) {
-                res.send(staff);
-            }
-            else {
-                res.send({ message: 'You Are Waiting For Admin Approval' })
+            try {
+                const id = req.params.id;
+                const query = { _id: new ObjectId(id) };
+
+                const staff = await staffsCollection.find(query).toArray();
+
+                if (staff) {
+                    res.send(staff);
+                }
+                else {
+                    res.send({
+                        message: 'You Are Waiting For Admin Approval'
+                    });
+                }
+
+            } catch (err) {
+                console.error('API route error:', err);
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
             }
         });
+
         app.get('/staff/uid_query/:uid', async (req, res) => {
             const uid = req.params.uid;
+
             try {
-                const result = await staffsCollection.findOne({ uid: uid });
+                const result = await staffsCollection.findOne({
+                    uid: uid
+                });
+
                 if (result) {
                     res.send(result);
                 }
                 else {
-                    res.send({ message: "UID not found" })
+                    res.send({
+                        message: "UID not found"
+                    });
                 }
+
             } catch (err) {
-                res.status(500).send({ error: "Failed to query staffs by name" });
+                res.status(500).send({
+                    error: "Failed to query staffs by name"
+                });
             }
         });
 
         app.post('/staff', async (req, res) => {
             const newStaff = req.body;
+
             try {
                 const result = await staffsCollection.insertOne(newStaff);
                 res.send(result);
+
             } catch (err) {
-                res.status(500).send({ error: "Failed to insert user request" });
+                res.status(500).send({
+                    error: "Failed to insert user request"
+                });
             }
-        })
+        });
+
         app.delete('/staff/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await staffsCollection.deleteOne(filter);
-            res.send(result);
-        })
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+
+                const result = await staffsCollection.deleteOne(filter);
+
+                res.send(result);
+
+            } catch (err) {
+                console.error('API route error:', err);
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
+        });
 
         app.get('/user_request_uid/:uid', async (req, res) => {
             const uid = req.params.uid;
 
             try {
-                const userRequest = await userRequestCollection.findOne({ uid });
+                const userRequest = await userRequestCollection.findOne({
+                    uid
+                });
+
                 if (userRequest) {
                     res.send(userRequest);
                 } else {
-                    // ✅ Send null or empty object, NOT nothing
-                    res.send({ message: 'UID not found' })
+                    res.send({
+                        message: 'UID not found'
+                    });
                 }
+
             } catch (err) {
-                res.status(500).send({ error: 'Server error checking user request' });
+                res.status(500).send({
+                    error: 'Server error checking user request'
+                });
             }
         });
+
         app.post('/user_request', async (req, res) => {
             const user = req.body;
+
             try {
                 const result = await userRequestCollection.insertOne(user);
                 res.send(result);
+
             } catch (err) {
-                res.status(500).send({ error: "Failed to insert user request" });
+                res.status(500).send({
+                    error: "Failed to insert user request"
+                });
             }
         });
+
         app.get('/additional_movement_request', async (req, res) => {
-            const result = await additionalMovementRequestCollection.find().toArray();
-            res.send(result);
-        })
+            try {
+                const result =
+                    await additionalMovementRequestCollection.find().toArray();
+
+                res.send(result);
+
+            } catch (err) {
+                console.error('API route error:', err);
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
+        });
+
         app.post('/additional_movement_request', async (req, res) => {
             const movementData = req.body;
+
             try {
-                const result = await additionalMovementRequestCollection.insertOne(movementData);
+                const result =
+                    await additionalMovementRequestCollection.insertOne(
+                        movementData
+                    );
+
                 res.send(result);
+
             } catch (err) {
-                res.status(500).send({ error: "Failed to insert request" });
+                res.status(500).send({
+                    error: "Failed to insert request"
+                });
             }
         });
+
         app.delete('/additional_movement_request/:uid', async (req, res) => {
-            const uid = req.params.uid;
-            const filter = { uid: uid };
-            const result = await additionalMovementRequestCollection.deleteOne(filter);
-            res.send(result);
+            try {
+                const uid = req.params.uid;
+                const filter = { uid: uid };
+
+                const result =
+                    await additionalMovementRequestCollection.deleteOne(filter);
+
+                res.send(result);
+
+            } catch (err) {
+                console.error('API route error:', err);
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
 
-
+        // --------------------------------------------------------------------------------------------------------
         app.get('/user_request', async (req, res) => {
-            const user = await userRequestCollection.find().toArray();
-            res.send(user);
-        })
-        app.delete('/user_request/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await userRequestCollection.deleteOne(filter);
-            res.send(result);
-        })
-        app.post('/new_staff', async (req, res) => {
-            const new_staff = req.body;
-            const result = staffsCollection.insertOne(new_staff);
-            res.send(result);
-        })
-        app.put('/staffs_daily_time/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const options = { upsert: true };
-            const updatedTime = req.body;
-            let attendance
-            if (updatedTime.name == 'today_enter1_time') {
-                attendance = {
-                    $set: {
-                        today_enter1_time: updatedTime.clickedTime,
-                        today_date: updatedTime.today_date
-                    }
-                };
-            }
-            else if (updatedTime.name == 'today_exit1_time') {
-                attendance = {
-                    $set: {
-                        today_exit1_time: updatedTime.clickedTime
-                    }
-                };
-            }
-            else if (updatedTime.name == 'today_enter2_time') {
-                attendance = {
-                    $set: {
-                        today_enter2_time: updatedTime.clickedTime
-                    }
-                };
-            }
-            else if (updatedTime.name == 'today_exit2_time') {
-                attendance = {
-                    $set: {
-                        today_exit2_time: updatedTime.clickedTime
-                    }
-                };
-            }
-
             try {
-                const result = await staffsCollection.updateOne(filter, attendance, options);
-                res.send(result);
+                const user = await userRequestCollection.find().toArray();
+                res.send(user);
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                console.error(err);
+                res.status(500).send({
+                    error: 'Failed to fetch user requests',
+                    details: err.message
+                });
             }
         });
-        app.put('/additional_movements/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const options = { upsert: true };
-            const updatedTime = req.body;
-            let attendance
-            if (updatedTime.name == 'additional_enter_time') {
-                attendance = {
-                    $set: {
-                        additional_enter_time: updatedTime.clickedTime
-                    }
-                };
-            }
-            else if (updatedTime.name == 'additional_exit_time') {
-                attendance = {
-                    $set: {
-                        additional_exit_time: updatedTime.clickedTime
-                    }
-                };
-            }
 
+
+        app.delete('/user_request/:id', async (req, res) => {
             try {
-                const result = await staffsCollection.updateOne(filter, attendance, options);
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const result = await userRequestCollection.deleteOne(filter);
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                console.error(err);
+                res.status(500).send({
+                    error: 'Delete failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.post('/new_staff', async (req, res) => {
+            try {
+                const new_staff = req.body;
+                const result = await staffsCollection.insertOne(new_staff);
+                res.send(result);
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({
+                    error: 'Staff creation failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.put('/staffs_daily_time/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const options = { upsert: true };
+                const updatedTime = req.body;
+
+                let attendance;
+
+                if (updatedTime.name == 'today_enter1_time') {
+                    attendance = {
+                        $set: {
+                            today_enter1_time: updatedTime.clickedTime,
+                            today_date: updatedTime.today_date
+                        }
+                    };
+                }
+                else if (updatedTime.name == 'today_exit1_time') {
+                    attendance = {
+                        $set: {
+                            today_exit1_time: updatedTime.clickedTime
+                        }
+                    };
+                }
+                else if (updatedTime.name == 'today_enter2_time') {
+                    attendance = {
+                        $set: {
+                            today_enter2_time: updatedTime.clickedTime
+                        }
+                    };
+                }
+                else if (updatedTime.name == 'today_exit2_time') {
+                    attendance = {
+                        $set: {
+                            today_exit2_time: updatedTime.clickedTime
+                        }
+                    };
+                }
+
+                const result = await staffsCollection.updateOne(
+                    filter,
+                    attendance,
+                    options
+                );
+
+                res.send(result);
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.put('/additional_movements/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const options = { upsert: true };
+                const updatedTime = req.body;
+
+                let attendance;
+
+                if (updatedTime.name == 'additional_enter_time') {
+                    attendance = {
+                        $set: {
+                            additional_enter_time: updatedTime.clickedTime
+                        }
+                    };
+                }
+                else if (updatedTime.name == 'additional_exit_time') {
+                    attendance = {
+                        $set: {
+                            additional_exit_time: updatedTime.clickedTime
+                        }
+                    };
+                }
+
+                const result = await staffsCollection.updateOne(
+                    filter,
+                    attendance,
+                    options
+                );
+
+                res.send(result);
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
 
@@ -355,69 +512,113 @@ async function run() {
         app.get('/shop_location', async (req, res) => {
             try {
                 const location = await shopLocationCollection.findOne({});
+
                 if (!location) {
-                    return res.status(404).json({ message: 'Shop location not found' });
+                    return res.status(404).json({
+                        message: 'Shop location not found'
+                    });
                 }
+
                 res.json({
                     latitude: location.latitude,
                     longitude: location.longitude,
                     shop_range: location.shop_range,
                 });
+
             } catch (error) {
                 console.error('GET /shop_location error:', error);
-                res.status(500).json({ error: 'Internal server error' });
+
+                res.status(500).json({
+                    error: 'Internal server error'
+                });
             }
         });
+
 
         // ✅ POST update/insert shop location
         app.post('/shop_location', async (req, res) => {
-            const { latitude, longitude, shop_range } = req.body;
-
-            if (typeof latitude !== 'number' || typeof longitude !== 'number' || typeof shop_range !== 'number') {
-                return res.status(400).json({ error: 'Latitude and Longitude must be numbers' });
-            }
-
             try {
+                const {
+                    latitude,
+                    longitude,
+                    shop_range
+                } = req.body;
+
+                if (
+                    typeof latitude !== 'number' ||
+                    typeof longitude !== 'number' ||
+                    typeof shop_range !== 'number'
+                ) {
+                    return res.status(400).json({
+                        error: 'Latitude and Longitude must be numbers'
+                    });
+                }
+
                 const existing = await shopLocationCollection.findOne({});
+
                 if (existing) {
                     await shopLocationCollection.updateOne(
                         { _id: existing._id },
-                        { $set: { latitude, longitude, shop_range } }
+                        {
+                            $set: {
+                                latitude,
+                                longitude,
+                                shop_range
+                            }
+                        }
                     );
-                } else {
-                    await shopLocationCollection.insertOne({ latitude, longitude, shop_range });
                 }
-                res.json({ message: 'Shop location saved successfully' });
+                else {
+                    await shopLocationCollection.insertOne({
+                        latitude,
+                        longitude,
+                        shop_range
+                    });
+                }
+
+                res.json({
+                    message: 'Shop location saved successfully'
+                });
+
             } catch (error) {
                 console.error('POST /shop_location error:', error);
-                res.status(500).json({ error: 'Internal server error' });
+
+                res.status(500).json({
+                    error: 'Internal server error'
+                });
             }
         });
 
+
         app.put('/submit_work_time/:id', async (req, res) => {
-            const id = req.params.id;
-            const bodyData = req.body;
-            const todaySummary = {
-                current_date: bodyData.currentDate,
-                current_day_name: bodyData.currentDayName,
-                today_enter1_time: bodyData.today_enter1_time,
-                today_exit1_time: bodyData.today_exit1_time,
-                today_enter2_time: bodyData.today_enter2_time,
-                today_exit2_time: bodyData.today_exit2_time,
-                total_hour: bodyData.total_hour,
-                total_minute: bodyData.total_minute,
-                today_bonus: bodyData.today_bonus,
-                total_earn: bodyData.total_earn,
-                additional_movement_hour: bodyData.additional_movement_hour,
-                additional_movement_minute: bodyData.additional_movement_minute
-
-            }
-            const filter = { _id: new ObjectId(id) };
-
             try {
+                const id = req.params.id;
+                const bodyData = req.body;
+
+                const todaySummary = {
+                    current_date: bodyData.currentDate,
+                    current_day_name: bodyData.currentDayName,
+                    today_enter1_time: bodyData.today_enter1_time,
+                    today_exit1_time: bodyData.today_exit1_time,
+                    today_enter2_time: bodyData.today_enter2_time,
+                    today_exit2_time: bodyData.today_exit2_time,
+                    total_hour: bodyData.total_hour,
+                    total_minute: bodyData.total_minute,
+                    today_bonus: bodyData.today_bonus,
+                    total_earn: bodyData.total_earn,
+                    additional_movement_hour: bodyData.additional_movement_hour,
+                    additional_movement_minute: bodyData.additional_movement_minute
+                };
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
                 // Update database: Push daily data & reset today's values
                 const updateDoc = {
-                    $push: { current_month_details: todaySummary },
+                    $push: {
+                        current_month_details: todaySummary
+                    },
                     $set: {
                         total_working_hour: bodyData.total_working_hour,
                         total_working_minute: bodyData.total_working_minute,
@@ -435,6 +636,7 @@ async function run() {
                         bonus: bodyData.total_bonus
                     }
                 };
+
                 const ErrorDoc = {
                     $set: {
                         today_date: bodyData.today_date,
@@ -447,25 +649,54 @@ async function run() {
                         additional_movement_hour: 0,
                         additional_movement_minute: 0
                     }
-                }
-                if (bodyData.today_exit1_time === '' && bodyData.today_exit2_time === '') {
-                    await staffsCollection.updateOne(filter, ErrorDoc, { upsert: true });
-                    res.send({ message: 'Work time submitted successfully' });
+                };
+
+                if (
+                    bodyData.today_exit1_time === '' &&
+                    bodyData.today_exit2_time === ''
+                ) {
+                    await staffsCollection.updateOne(
+                        filter,
+                        ErrorDoc,
+                        { upsert: true }
+                    );
+
+                    res.send({
+                        message: 'Work time submitted successfully'
+                    });
                 }
                 else {
-                    await staffsCollection.updateOne(filter, updateDoc, { upsert: true });
-                    res.send({ message: 'Work time submitted successfully' });
+                    await staffsCollection.updateOne(
+                        filter,
+                        updateDoc,
+                        { upsert: true }
+                    );
+
+                    res.send({
+                        message: 'Work time submitted successfully'
+                    });
                 }
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err.message });
+                console.error(err);
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
-        app.put('/additional_movement_submit/:id', async (req, res) => {
-            const id = req.params.id;
-            const bodyData = req.body;
-            const filter = { _id: new ObjectId(id) };
 
+
+        app.put('/additional_movement_submit/:id', async (req, res) => {
             try {
+                const id = req.params.id;
+                const bodyData = req.body;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
                 // Update database: Push daily data & reset today's values
                 const updateDoc = {
                     $set: {
@@ -475,6 +706,7 @@ async function run() {
                         additional_movement_minute: bodyData.additional_movement_minute
                     }
                 };
+
                 const ErrorDoc = {
                     $set: {
                         additional_enter_time: '',
@@ -482,46 +714,78 @@ async function run() {
                         additional_movement_hour: 0,
                         additional_movement_minute: 0
                     }
-                }
+                };
+
                 if (bodyData.additional_enter_time === '') {
-                    const result = await staffsCollection.updateOne(filter, ErrorDoc);
+                    const result = await staffsCollection.updateOne(
+                        filter,
+                        ErrorDoc
+                    );
+
                     res.send(result);
                 }
                 else {
-                    const result = await staffsCollection.updateOne(filter, updateDoc);
+                    const result = await staffsCollection.updateOne(
+                        filter,
+                        updateDoc
+                    );
+
                     res.send(result);
                 }
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err.message });
+                console.error(err);
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
 
 
         app.put('/transection_details/:id', async (req, res) => {
-            const id = req.params.id;
-            const bodyData = req.body;
-            const filter = { _id: new ObjectId(id) };
-
-            const newTransectionsData = {
-                transection_id: bodyData.transection_id,
-                transection_date: bodyData.currentDate,
-                transection_amount: bodyData.transection_amount,
-                transection_type: bodyData.transection_type,
-                comment: bodyData.comment
-            };
-
             try {
+                const id = req.params.id;
+                const bodyData = req.body;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const newTransectionsData = {
+                    transection_id: bodyData.transection_id,
+                    transection_date: bodyData.currentDate,
+                    transection_amount: bodyData.transection_amount,
+                    transection_type: bodyData.transection_type,
+                    comment: bodyData.comment
+                };
+
                 const staff = await staffsCollection.findOne(filter);
 
                 // Step 1: If length > 19, remove first transection
                 if (staff?.transections?.length > 19) {
-                    await staffsCollection.updateOne(filter, { $pop: { transections: -1 } }); // remove first
+                    await staffsCollection.updateOne(
+                        filter,
+                        {
+                            $pop: {
+                                transections: -1
+                            }
+                        }
+                    );
                 }
 
                 // Step 2: Push new transection + update balances
                 if (bodyData.transection_type === 'Payback Lend') {
-                    const new_withdrawal_amount = bodyData.previous_withdrawal_amount - bodyData.transection_amount;
-                    const new_available_balance = bodyData.previous_available_balance + bodyData.transection_amount
+
+                    const new_withdrawal_amount =
+                        bodyData.previous_withdrawal_amount -
+                        bodyData.transection_amount;
+
+                    const new_available_balance =
+                        bodyData.previous_available_balance +
+                        bodyData.transection_amount;
+
                     const updateDoc = {
                         $push: {
                             transections: newTransectionsData
@@ -532,10 +796,15 @@ async function run() {
                         }
                     };
 
-                    const result = await staffsCollection.updateOne(filter, updateDoc);
+                    const result = await staffsCollection.updateOne(
+                        filter,
+                        updateDoc
+                    );
+
                     res.send(result);
                 }
                 else {
+
                     const updateDoc = {
                         $push: {
                             transections: newTransectionsData
@@ -546,39 +815,60 @@ async function run() {
                         }
                     };
 
-                    const result = await staffsCollection.updateOne(filter, updateDoc);
+                    const result = await staffsCollection.updateOne(
+                        filter,
+                        updateDoc
+                    );
+
                     res.send(result);
                 }
 
             } catch (err) {
                 console.error(err);
-                res.status(500).send({ error: 'Update failed', details: err.message });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
+
+
         app.put('/closing_month/:id', async (req, res) => {
-            const id = req.params.id;
-            const bodyData = req.body;
-            const filter = { _id: new ObjectId(id) };
-
-            const newIncomeHistory = {
-                month_name: bodyData.month_name,
-                total_worked_time: `${bodyData.total_working_hour} Hour, ${bodyData.total_working_minute} Minute`,
-                previous_due: bodyData.last_month_due,
-                total_income: bodyData.total_income,
-                paid_amount: bodyData.paid_amount,
-                receiveable_amount: bodyData.last_month_due,
-                paid_date: bodyData.paid_date,
-            };
-
             try {
+                const id = req.params.id;
+                const bodyData = req.body;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const newIncomeHistory = {
+                    month_name: bodyData.month_name,
+                    total_worked_time:
+                        `${bodyData.total_working_hour} Hour, ${bodyData.total_working_minute} Minute`,
+                    previous_due: bodyData.last_month_due,
+                    total_income: bodyData.total_income,
+                    paid_amount: bodyData.paid_amount,
+                    receiveable_amount: bodyData.last_month_due,
+                    paid_date: bodyData.paid_date,
+                };
+
                 const staff = await staffsCollection.findOne(filter);
 
                 // Step 1: If length > 19, remove first transection
                 if (staff?.income_history?.length > 12) {
-                    await staffsCollection.updateOne(filter, { $pop: { income_history: -1 } }); // remove first
+                    await staffsCollection.updateOne(
+                        filter,
+                        {
+                            $pop: {
+                                income_history: -1
+                            }
+                        }
+                    );
                 }
 
-                // Step 2: Push new transection + update balances
+                // Step 2: Push new transection
                 const updateDoc = {
                     $push: {
                         income_history: newIncomeHistory
@@ -597,88 +887,172 @@ async function run() {
                     }
                 };
 
-                const result = await staffsCollection.updateOne(filter, updateDoc);
+                const result = await staffsCollection.updateOne(
+                    filter,
+                    updateDoc
+                );
+
                 res.send(result);
 
             } catch (err) {
                 console.error(err);
-                res.status(500).send({ error: 'Update failed', details: err.message });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
+
+
         app.post('/shop_transections_closing_month', async (req, res) => {
-            const bodyData = req.body;
             try {
+                const bodyData = req.body;
+
                 const existing = await shopTransectionsCollection.findOne({});
+
                 if (existing) {
                     await shopTransectionsSummaryCollection.insertOne(bodyData);
+
                     await shopTransectionsCollection.updateOne(
                         { _id: existing._id },
-                        { $set: { month_name: '', total_revenue_amount: 0, total_expense_amount: 0, hand_on_cash: bodyData.hand_on_cash, revenue_transections: [], expense_transections: [] } }
+                        {
+                            $set: {
+                                month_name: '',
+                                total_revenue_amount: 0,
+                                total_expense_amount: 0,
+                                hand_on_cash: bodyData.hand_on_cash,
+                                revenue_transections: [],
+                                expense_transections: []
+                            }
+                        }
                     );
-                } else {
+                }
+                else {
                     await shopTransectionsCollection.insertOne(bodyData);
                 }
-                res.json({ message: 'Shop transections saved successfully' });
+
+                res.json({
+                    message: 'Shop transections saved successfully'
+                });
 
             } catch (err) {
                 console.error(err);
-                res.status(500).send({ error: 'Update failed', details: err.message });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
+
+
         app.post('/self_transections_closing_month', async (req, res) => {
-            const bodyData = req.body;
             try {
+                const bodyData = req.body;
+
                 const existing = await selfTransectionsCollection.findOne({});
+
                 if (existing) {
                     await selfTransectionsSummaryCollection.insertOne(bodyData);
+
                     await selfTransectionsCollection.updateOne(
                         { _id: existing._id },
-                        { $set: { month_name: '', total_revenue_amount: 0, total_expense_amount: 0, hand_on_cash: bodyData.hand_on_cash, revenue_transections: [], expense_transections: [] } }
+                        {
+                            $set: {
+                                month_name: '',
+                                total_revenue_amount: 0,
+                                total_expense_amount: 0,
+                                hand_on_cash: bodyData.hand_on_cash,
+                                revenue_transections: [],
+                                expense_transections: []
+                            }
+                        }
                     );
-                } else {
+                }
+                else {
                     await selfTransectionsCollection.insertOne(bodyData);
                 }
-                res.json({ message: 'Shop transections saved successfully' });
+
+                res.json({
+                    message: 'Shop transections saved successfully'
+                });
 
             } catch (err) {
                 console.error(err);
-                res.status(500).send({ error: 'Update failed', details: err.message });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
+
+
         app.put('/start_new_month', async (req, res) => {
-            const bodyData = req.body;
             try {
+                const bodyData = req.body;
+
                 const existing = await shopTransectionsCollection.findOne({});
+
                 const result = await shopTransectionsCollection.updateOne(
                     { _id: existing._id },
-                    { $set: { month_name: bodyData.month_name } }
+                    {
+                        $set: {
+                            month_name: bodyData.month_name
+                        }
+                    }
                 );
-                res.send(result)
+
+                res.send(result);
+
             } catch (err) {
                 console.error(err);
-                res.status(500).send({ error: 'Update failed', details: err.message });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
-        })
+        });
+
+
         app.put('/self_start_new_month', async (req, res) => {
-            const bodyData = req.body;
             try {
+                const bodyData = req.body;
+
                 const existing = await selfTransectionsCollection.findOne({});
+
                 const result = await selfTransectionsCollection.updateOne(
                     { _id: existing._id },
-                    { $set: { month_name: bodyData.month_name } }
+                    {
+                        $set: {
+                            month_name: bodyData.month_name
+                        }
+                    }
                 );
-                res.send(result)
+
+                res.send(result);
+
             } catch (err) {
                 console.error(err);
-                res.status(500).send({ error: 'Update failed', details: err.message });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
-        })
+        });
+
+
+        // ======================================================================================================================
 
         app.put('/set_user_category/:uid', async (req, res) => {
             const uid = req.params.uid;
             const filter = { uid: uid };
             const options = { upsert: true };
             const updated = req.body;
+
             const newUserCategory = {
                 $set: {
                     user_category: updated.user_category
@@ -686,17 +1060,27 @@ async function run() {
             };
 
             try {
-                const result = await staffsCollection.updateOne(filter, newUserCategory, options);
+                const result = await staffsCollection.updateOne(
+                    filter,
+                    newUserCategory,
+                    options
+                );
+
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err
+                });
             }
         });
+
         app.put('/set_user_status/:uid', async (req, res) => {
             const uid = req.params.uid;
             const filter = { uid: uid };
             const options = { upsert: true };
             const updated = req.body;
+
             const newUserCategory = {
                 $set: {
                     status: updated.status
@@ -704,32 +1088,62 @@ async function run() {
             };
 
             try {
-                const result = await staffsCollection.updateOne(filter, newUserCategory, options);
+                const result = await staffsCollection.updateOne(
+                    filter,
+                    newUserCategory,
+                    options
+                );
+
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err
+                });
             }
         });
+
         app.get('/shop_transections', async (req, res) => {
-            const result = await shopTransectionsCollection.find().toArray();
-            res.send(result);
+            try {
+                const result = await shopTransectionsCollection.find().toArray();
+                res.send(result);
+
+            } catch (err) {
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.put('/shop_transections', async (req, res) => {
 
             try {
 
                 const filter = {
-                    _id: new ObjectId(process.env.Shop_Transections_ObjectId)
+                    _id: new ObjectId(
+                        process.env.Shop_Transections_ObjectId
+                    )
                 };
 
                 const bodyData = req.body;
 
                 const transection = {
-                    transection_id: bodyData.transection_id || `${Date.now()}`,
+                    transection_id:
+                        bodyData.transection_id || `${Date.now()}`,
+
                     transection_date: bodyData.transection_date,
-                    transection_amount: Number(bodyData.transection_amount),
-                    transection_category: bodyData.transection_category || '',
-                    transection_explaination: bodyData.transection_explaination || ''
+
+                    transection_amount:
+                        Number(bodyData.transection_amount),
+
+                    transection_category:
+                        bodyData.transection_category || '',
+
+                    transection_explaination:
+                        bodyData.transection_explaination || ''
                 };
 
                 if (bodyData.transection_type === 'revenue') {
@@ -738,9 +1152,13 @@ async function run() {
                         $push: {
                             revenue_transections: transection
                         },
+
                         $set: {
-                            total_revenue_amount: Number(bodyData.total_revenue_amount),
-                            hand_on_cash: Number(bodyData.hand_on_cash)
+                            total_revenue_amount:
+                                Number(bodyData.total_revenue_amount),
+
+                            hand_on_cash:
+                                Number(bodyData.hand_on_cash)
                         }
                     };
 
@@ -759,9 +1177,13 @@ async function run() {
                         $push: {
                             expense_transections: transection
                         },
+
                         $set: {
-                            total_expense_amount: Number(bodyData.total_expense_amount),
-                            hand_on_cash: Number(bodyData.hand_on_cash)
+                            total_expense_amount:
+                                Number(bodyData.total_expense_amount),
+
+                            hand_on_cash:
+                                Number(bodyData.hand_on_cash)
                         }
                     };
 
@@ -790,466 +1212,1196 @@ async function run() {
                 });
             }
         });
+
         app.put('/self_transections', async (req, res) => {
-            const filter = await selfTransectionsCollection.findOne({})
-            const bodyData = req.body;
-            const transection = {
-                transection_id: bodyData.transection_id,
-                transection_date: bodyData.transection_date,
-                transection_amount: bodyData.transection_amount,
-                transection_explaination: bodyData.transection_explaination
-            }
-            if (bodyData.transection_type === 'revenue') {
-                const updateDoc = {
-                    $push: {
-                        revenue_transections: transection
-                    },
-                    $set: {
-                        total_revenue_amount: bodyData.total_revenue_amount,
-                        hand_on_cash: bodyData.hand_on_cash
-                    }
+
+            try {
+
+                const filter =
+                    await selfTransectionsCollection.findOne({});
+
+                const bodyData = req.body;
+
+                const transection = {
+                    transection_id: bodyData.transection_id,
+                    transection_date: bodyData.transection_date,
+                    transection_amount: bodyData.transection_amount,
+                    transection_explaination:
+                        bodyData.transection_explaination
+                };
+
+                if (bodyData.transection_type === 'revenue') {
+
+                    const updateDoc = {
+                        $push: {
+                            revenue_transections: transection
+                        },
+
+                        $set: {
+                            total_revenue_amount:
+                                bodyData.total_revenue_amount,
+
+                            hand_on_cash:
+                                bodyData.hand_on_cash
+                        }
+                    };
+
+                    const result =
+                        await selfTransectionsCollection.updateOne(
+                            filter,
+                            updateDoc
+                        );
+
+                    res.send(result);
+
+                } else {
+
+                    const updateDoc = {
+                        $push: {
+                            expense_transections: transection
+                        },
+
+                        $set: {
+                            total_expense_amount:
+                                bodyData.total_expense_amount,
+
+                            hand_on_cash:
+                                bodyData.hand_on_cash
+                        }
+                    };
+
+                    const result =
+                        await selfTransectionsCollection.updateOne(
+                            filter,
+                            updateDoc
+                        );
+
+                    res.send(result);
                 }
-                const result = await selfTransectionsCollection.updateOne(filter, updateDoc);
-                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
             }
-            else {
-                const updateDoc = {
-                    $push: {
-                        expense_transections: transection
-                    },
-                    $set: {
-                        total_expense_amount: bodyData.total_expense_amount,
-                        hand_on_cash: bodyData.hand_on_cash
-                    }
-                }
-                const result = await selfTransectionsCollection.updateOne(filter, updateDoc);
-                res.send(result);
-            }
-        })
+        });
+
         app.get('/shop_transections_summary', async (req, res) => {
-            const result = await shopTransectionsSummaryCollection.find().toArray();
-            res.send(result);
+
+            try {
+
+                const result =
+                    await shopTransectionsSummaryCollection
+                        .find()
+                        .toArray();
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.get('/notice_panel', async (req, res) => {
-            const result = await noticePanelCollection.find().toArray();
-            res.send(result);
+
+            try {
+
+                const result =
+                    await noticePanelCollection.find().toArray();
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.post('/notice_panel', async (req, res) => {
+
             const options = { upsert: true };
             const updatedNotice = req.body;
+
             try {
-                const existing = await noticePanelCollection.findOne({});
+
+                const existing =
+                    await noticePanelCollection.findOne({});
+
                 if (existing) {
+
                     await noticePanelCollection.updateOne(
                         { _id: existing._id },
-                        { $set: { notice: updatedNotice.notice } },
+
+                        {
+                            $set: {
+                                notice: updatedNotice.notice
+                            }
+                        },
+
                         options
                     );
+
                 } else {
-                    await noticePanelCollection.insertOne({ notice: updatedNotice.notice });
+
+                    await noticePanelCollection.insertOne({
+                        notice: updatedNotice.notice
+                    });
+
                 }
-                res.send({ message: 'notice set successfully' });
+
+                res.send({
+                    message: 'notice set successfully'
+                });
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err
+                });
             }
         });
+
         app.get('/staff_bonus', async (req, res) => {
-            const result = await staffBonusCollection.findOne({});
-            res.send(result);
+
+            try {
+
+                const result =
+                    await staffBonusCollection.findOne({});
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.put('/staff_bonus', async (req, res) => {
-            const entryData = req.body;
-            const existing = await staffBonusCollection.findOne({});
-            if (entryData.entry_type === 'new day') {
-                const result = await staffBonusCollection.updateOne(
-                    { _id: existing._id },
-                    {
-                        $set: {
-                            date: entryData.date,
-                            first_entry: { time: '', uid: '' },
-                            second_entry: { time: '', uid: '' }
+
+            try {
+
+                const entryData = req.body;
+
+                const existing =
+                    await staffBonusCollection.findOne({});
+
+                if (entryData.entry_type === 'new day') {
+
+                    const result =
+                        await staffBonusCollection.updateOne(
+                            { _id: existing._id },
+
+                            {
+                                $set: {
+                                    date: entryData.date,
+
+                                    first_entry: {
+                                        time: '',
+                                        uid: ''
+                                    },
+
+                                    second_entry: {
+                                        time: '',
+                                        uid: ''
+                                    }
+                                }
+                            }
+                        );
+
+                    res.send(result);
+                }
+
+                if (entryData.entry_type === 'first entry') {
+
+                    const now = new Date();
+
+                    const parseTime = (timeStr) => {
+
+                        if (!timeStr) return null;
+
+                        const [time, modifier] =
+                            timeStr.split(' ');
+
+                        let [hours, minutes] =
+                            time.split(':').map(Number);
+
+                        if (
+                            modifier === 'PM' &&
+                            hours !== 12
+                        ) {
+                            hours += 12;
                         }
+
+                        if (
+                            modifier === 'AM' &&
+                            hours === 12
+                        ) {
+                            hours = 0;
+                        }
+
+                        return hours * 60 + minutes;
+                    };
+
+                    if (
+                        parseTime(entryData.time) <
+                        existing.start_time
+                    ) {
+
+                        const result =
+                            await staffBonusCollection.updateOne(
+                                { _id: existing._id },
+
+                                {
+                                    $set: {
+                                        first_entry: {
+                                            time: '8:00 AM',
+                                            uid: entryData.uid
+                                        }
+                                    }
+                                }
+                            );
+
+                        res.send(result);
                     }
-                );
-                res.send(result);
-            }
-            if (entryData.entry_type === 'first entry') {
-                const now = new Date();
-                const parseTime = (timeStr) => {
-                    if (!timeStr) return null;
-                    const [time, modifier] = timeStr.split(' ');
-                    let [hours, minutes] = time.split(':').map(Number);
-                    if (modifier === 'PM' && hours !== 12) hours += 12;
-                    if (modifier === 'AM' && hours === 12) hours = 0;
-                    return hours * 60 + minutes;
-                };
-                if (parseTime(entryData.time) < existing.start_time) {
-                    const result = await staffBonusCollection.updateOne(
-                        { _id: existing._id },
-                        { $set: { first_entry: { time: '8:00 AM', uid: entryData.uid } } }
-                    );
+
+                    if (
+                        parseTime(entryData.time) >
+                        existing.start_time &&
+                        parseTime(entryData.time) <
+                        existing.end_time
+                    ) {
+
+                        const result =
+                            await staffBonusCollection.updateOne(
+                                { _id: existing._id },
+
+                                {
+                                    $set: {
+                                        first_entry: {
+                                            time: entryData.time,
+                                            uid: entryData.uid
+                                        }
+                                    }
+                                }
+                            );
+
+                        res.send(result);
+                    }
+                }
+
+                if (entryData.entry_type === 'second entry') {
+
+                    const result =
+                        await staffBonusCollection.updateOne(
+                            { _id: existing._id },
+
+                            {
+                                $set: {
+                                    second_entry: {
+                                        time: entryData.time,
+                                        uid: entryData.uid
+                                    }
+                                }
+                            }
+                        );
+
                     res.send(result);
                 }
-                if (parseTime(entryData.time) > existing.start_time && parseTime(entryData.time) < existing.end_time) {
-                    const result = await staffBonusCollection.updateOne(
-                        { _id: existing._id },
-                        { $set: { first_entry: { time: entryData.time, uid: entryData.uid } } }
-                    );
-                    res.send(result);
-                }
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
             }
-            if (entryData.entry_type === 'second entry') {
-                const result = await staffBonusCollection.updateOne(
-                    { _id: existing._id },
-                    { $set: { second_entry: { time: entryData.time, uid: entryData.uid } } }
-                );
-                res.send(result);
-            }
-        })
+        });
+
         app.patch('/set_bonus_time', async (req, res) => {
-            const { start_time, end_time } = req.body;
-            const existing = await staffBonusCollection.findOne({});
-            const result = await staffBonusCollection.updateOne(
-                { _id: existing._id },
-                { $set: { start_time, end_time } }
-            );
-            res.send(result);
-        })
+
+            try {
+
+                const {
+                    start_time,
+                    end_time
+                } = req.body;
+
+                const existing =
+                    await staffBonusCollection.findOne({});
+
+                const result =
+                    await staffBonusCollection.updateOne(
+                        { _id: existing._id },
+
+                        {
+                            $set: {
+                                start_time,
+                                end_time
+                            }
+                        }
+                    );
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
+        });
+
         app.get('/self_transections', async (req, res) => {
-            const result = await selfTransectionsCollection.find().toArray();
-            res.send(result);
+
+            try {
+
+                const result =
+                    await selfTransectionsCollection
+                        .find()
+                        .toArray();
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.get('/self_transections_summary', async (req, res) => {
-            const result = await selfTransectionsSummaryCollection.find().toArray();
-            res.send(result);
+
+            try {
+
+                const result =
+                    await selfTransectionsSummaryCollection
+                        .find()
+                        .toArray();
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.get('/client_corner', async (req, res) => {
-            const result = await clientCornerCollection.find().toArray();
-            res.send(result);
+
+            try {
+
+                const result =
+                    await clientCornerCollection
+                        .find()
+                        .toArray();
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.get('/client_details/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await clientCornerCollection.findOne(filter);
-            res.send(result);
+
+            try {
+
+                const id = req.params.id;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const result =
+                    await clientCornerCollection.findOne(filter);
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.delete('/client/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await clientCornerCollection.deleteOne(filter);
-            res.send(result);
+
+            try {
+
+                const id = req.params.id;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const result =
+                    await clientCornerCollection.deleteOne(filter);
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.post('/new_client', async (req, res) => {
-            const clientData = req.body;
-            const result = await clientCornerCollection.insertOne(clientData);
-            res.send(result);
-        })
+
+            try {
+
+                const clientData = req.body;
+
+                const result =
+                    await clientCornerCollection.insertOne(
+                        clientData
+                    );
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
+        });
+
         app.get('/air_ticket_client_corner', async (req, res) => {
-            const result = await airTicketClientCornerCollection.find().toArray();
-            res.send(result);
+
+            try {
+
+                const result =
+                    await airTicketClientCornerCollection
+                        .find()
+                        .toArray();
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.get('/air_ticket_client_details/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await airTicketClientCornerCollection.findOne(filter);
-            res.send(result);
+
+            try {
+
+                const id = req.params.id;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const result =
+                    await airTicketClientCornerCollection
+                        .findOne(filter);
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
         app.delete('/air_ticket_client/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const result = await airTicketClientCornerCollection.deleteOne(filter);
-            res.send(result);
+
+            try {
+
+                const id = req.params.id;
+
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const result =
+                    await airTicketClientCornerCollection
+                        .deleteOne(filter);
+
+                res.send(result);
+
+            } catch (err) {
+
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Internal server error',
+                    details: err.message
+                });
+            }
         });
+
+        // ===============================================================================================================================
         app.post('/air_ticket_new_client', async (req, res) => {
-            const clientData = req.body;
-            const result = await airTicketClientCornerCollection.insertOne(clientData);
-            res.send(result);
-        })
-        app.get('/voucher_sl', async (req, res) => {
-            const result = await voucherSlCollection.findOne({});
-            res.send(result);
+            try {
+                const clientData = req.body;
+
+                const result =
+                    await airTicketClientCornerCollection.insertOne(
+                        clientData
+                    );
+
+                res.send(result);
+
+            } catch (err) {
+                console.error('API route error:', err);
+
+                res.status(500).send({
+                    error: 'Insert failed',
+                    details: err.message
+                });
+            }
         });
+
+
+        app.get('/voucher_sl', async (req, res) => {
+            try {
+                const result =
+                    await voucherSlCollection.findOne({});
+
+                res.send(result);
+
+            } catch (err) {
+                console.error('API route error:', err);
+
+                res.status(500).send({
+                    error: 'Fetch failed',
+                    details: err.message
+                });
+            }
+        });
+
+
         app.post('/voucher_sl', async (req, res) => {
             const options = { upsert: true };
             const updatedSl = req.body;
+
             try {
-                const existing = await voucherSlCollection.findOne({});
+                const existing =
+                    await voucherSlCollection.findOne({});
+
                 if (existing) {
                     await voucherSlCollection.updateOne(
                         { _id: existing._id },
-                        { $set: { sl_no: updatedSl.new_sl_no } },
+                        {
+                            $set: {
+                                sl_no: updatedSl.new_sl_no
+                            }
+                        },
                         options
                     );
                 } else {
-                    await voucherSlCollection.insertOne({ sl_no: updatedSl.new_sl_no });
+                    await voucherSlCollection.insertOne({
+                        sl_no: updatedSl.new_sl_no
+                    });
                 }
-                res.send({ message: 'new sl set successfully' });
+
+                res.send({
+                    message: 'new sl set successfully'
+                });
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                console.error('API route error:', err);
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
+
+
         app.put('/new_voucher/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const options = { upsert: true };
-            const Data = req.body;
-            const voucher = {
-                date: Data.date,
-                voucher_no: String(Data.voucher_no),
-                products: Data.products,
-                total: Data.total,
-                paid_amount: Data.paid_amount,
-                due_amount: Data.due_amount,
-                payment_status: Data.payment_status,
-                discount: Data.discount
-            }
             try {
-                const client = await clientCornerCollection.findOne(filter);
+                const id = req.params.id;
 
-                // Step 1: If length > 19, remove first transection
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const options = {
+                    upsert: true
+                };
+
+                const Data = req.body;
+
+                const voucher = {
+                    date: Data.date,
+                    voucher_no: String(Data.voucher_no),
+                    products: Data.products,
+                    total: Data.total,
+                    paid_amount: Data.paid_amount,
+                    due_amount: Data.due_amount,
+                    payment_status: Data.payment_status,
+                    discount: Data.discount
+                };
+
+                const client =
+                    await clientCornerCollection.findOne(filter);
+
+                // Step 1: If length > 10, remove first voucher
                 if (client?.vouchers?.length > 10) {
-                    await clientCornerCollection.updateOne(filter, { $pop: { vouchers: -1 } }); // remove first
+                    await clientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $pop: {
+                                vouchers: -1
+                            }
+                        }
+                    );
                 }
-                const result = await clientCornerCollection.updateOne(
-                    filter,
-                    { $push: { vouchers: voucher } },
-                    options
-                );
+
+                const result =
+                    await clientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $push: {
+                                vouchers: voucher
+                            }
+                        },
+                        options
+                    );
+
                 res.send(result);
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                console.error('API route error:', err);
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
+
+
         app.put('/air_ticket_new_voucher/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const options = { upsert: true };
-            const Data = req.body;
-            const voucher = {
-                date: Data.date,
-                voucher_no: String(Data.voucher_no),
-                destination: Data.destination,
-                flight_date: Data.flight_date,
-                ticket_price: Data.ticket_price,
-                paid_amount: Data.paid_amount,
-                due_amount: Data.due_amount,
-                payment_status: Data.payment_status,
-                discount: Data.discount
-            }
             try {
-                const client = await airTicketClientCornerCollection.findOne(filter);
+                const id = req.params.id;
 
-                // Step 1: If length > 19, remove first transection
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
+                const options = {
+                    upsert: true
+                };
+
+                const Data = req.body;
+
+                const voucher = {
+                    date: Data.date,
+                    voucher_no: String(Data.voucher_no),
+                    destination: Data.destination,
+                    flight_date: Data.flight_date,
+                    ticket_price: Data.ticket_price,
+                    paid_amount: Data.paid_amount,
+                    due_amount: Data.due_amount,
+                    payment_status: Data.payment_status,
+                    discount: Data.discount
+                };
+
+                const client =
+                    await airTicketClientCornerCollection.findOne(
+                        filter
+                    );
+
+                // Step 1: If length > 10, remove first voucher
                 if (client?.vouchers?.length > 10) {
-                    await airTicketClientCornerCollection.updateOne(filter, { $pop: { vouchers: -1 } }); // remove first
+                    await airTicketClientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $pop: {
+                                vouchers: -1
+                            }
+                        }
+                    );
                 }
-                const result = await airTicketClientCornerCollection.updateOne(
-                    filter,
-                    { $push: { vouchers: voucher } },
-                    options
-                );
-                res.send(result);
-            } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
-            }
-        });
-        app.put('/take_payment/:id', async (req, res) => {
-            const id = req.params.id;
-            const Data = req.body;
-            const filter = { _id: new ObjectId(id), 'vouchers.voucher_no': Data.voucher_no };
-            const clientFilter = { _id: new ObjectId(id) };
-            const transection = {
-                date: Data.date,
-                reference_voucher: String(Data.reference_voucher),
-                paid_amount: Data.paid_amount,
-                transection_amount: Data.transection_amount,
-                due_amount: Data.due,
-                payment_status: Data.payment_status
-            }
-            try {
-                const client = await clientCornerCollection.findOne(clientFilter);
-                console.log(client.transections.length)
-                // Step 1: If length > 19, remove first transection
-                if (client?.transections?.length > 15) {
-                    await clientCornerCollection.updateOne(filter, { $pop: { transections: -1 } }); // remove first
-                }
-                const result = await clientCornerCollection.updateOne(
-                    filter,
-                    {
-                        $set: {
-                            'vouchers.$.paid_amount': Data.paid_amount,
-                            'vouchers.$.due_amount': Data.due,
-                            'vouchers.$.payment_status': Data.payment_status,
-                            'vouchers.$.discount': Data.discount
-                        }, $push: { transections: transection }
-                    }
-                );
-                if (result.modifiedCount > 0) {
-                    res.send({ success: true, message: 'updated' });
-                } else {
-                    res.status(404).send({ success: false, message: 'Voucher not found' });
-                }
-            } catch (err) {
-                console.log(err);
-                res.status(500).send({ error: 'Update failed', details: err });
-            }
-        });
-        app.put('/air_ticket_take_payment/:id', async (req, res) => {
-            const id = req.params.id;
-            const Data = req.body;
-            const filter = { _id: new ObjectId(id), 'vouchers.voucher_no': Data.voucher_no };
-            const clientFilter = { _id: new ObjectId(id) };
-            const transection = {
-                date: Data.date,
-                reference_voucher: String(Data.reference_voucher),
-                paid_amount: Data.paid_amount,
-                transection_amount: Data.transection_amount,
-                due_amount: Data.due,
-                payment_status: Data.payment_status
-            }
-            try {
-                const client = await airTicketClientCornerCollection.findOne(clientFilter);
 
-                // Step 1: If length > 19, remove first transection
-                if (client?.transections?.length > 15) {
-                    await airTicketClientCornerCollection.updateOne(filter, { $pop: { transections: -1 } }); // remove first
-                }
-                const result = await airTicketClientCornerCollection.updateOne(
-                    filter,
-                    {
-                        $set: {
-                            'vouchers.$.paid_amount': Data.paid_amount,
-                            'vouchers.$.due_amount': Data.due,
-                            'vouchers.$.payment_status': Data.payment_status,
-                            'vouchers.$.discount': Data.discount
-                        }, $push: { transections: transection }
-                    }
-                );
-                if (result.modifiedCount > 0) {
-                    res.send({ success: true, message: 'updated' });
-                } else {
-                    res.status(404).send({ success: false, message: 'Voucher not found' });
-                }
+                const result =
+                    await airTicketClientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $push: {
+                                vouchers: voucher
+                            }
+                        },
+                        options
+                    );
+
+                res.send(result);
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                console.error('API route error:', err);
+
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.put('/take_payment/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const Data = req.body;
+
+                const filter = {
+                    _id: new ObjectId(id),
+                    'vouchers.voucher_no': Data.voucher_no
+                };
+
+                const clientFilter = {
+                    _id: new ObjectId(id)
+                };
+
+                const transection = {
+                    date: Data.date,
+                    reference_voucher:
+                        String(Data.reference_voucher),
+                    paid_amount: Data.paid_amount,
+                    transection_amount:
+                        Data.transection_amount,
+                    due_amount: Data.due,
+                    payment_status:
+                        Data.payment_status
+                };
+
+                const client =
+                    await clientCornerCollection.findOne(
+                        clientFilter
+                    );
+
+                console.log(
+                    client?.transections?.length
+                );
+
+                // Step 1: If length > 15, remove first transection
+                if (client?.transections?.length > 15) {
+                    await clientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $pop: {
+                                transections: -1
+                            }
+                        }
+                    );
+                }
+
+                const result =
+                    await clientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $set: {
+                                'vouchers.$.paid_amount':
+                                    Data.paid_amount,
+
+                                'vouchers.$.due_amount':
+                                    Data.due,
+
+                                'vouchers.$.payment_status':
+                                    Data.payment_status,
+
+                                'vouchers.$.discount':
+                                    Data.discount
+                            },
+
+                            $push: {
+                                transections: transection
+                            }
+                        }
+                    );
+
+                if (result.modifiedCount > 0) {
+                    return res.send({
+                        success: true,
+                        message: 'updated'
+                    });
+                }
+
+                return res.status(404).send({
+                    success: false,
+                    message: 'Voucher not found'
+                });
+
+            } catch (err) {
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.put('/air_ticket_take_payment/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const Data = req.body;
+
+                const filter = {
+                    _id: new ObjectId(id),
+                    'vouchers.voucher_no': Data.voucher_no
+                };
+
+                const clientFilter = {
+                    _id: new ObjectId(id)
+                };
+
+                const transection = {
+                    date: Data.date,
+                    reference_voucher:
+                        String(Data.reference_voucher),
+                    paid_amount: Data.paid_amount,
+                    transection_amount:
+                        Data.transection_amount,
+                    due_amount: Data.due,
+                    payment_status:
+                        Data.payment_status
+                };
+
+                const client =
+                    await airTicketClientCornerCollection.findOne(
+                        clientFilter
+                    );
+
+                // Step 1: If length > 15, remove first transection
+                if (client?.transections?.length > 15) {
+                    await airTicketClientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $pop: {
+                                transections: -1
+                            }
+                        }
+                    );
+                }
+
+                const result =
+                    await airTicketClientCornerCollection.updateOne(
+                        filter,
+                        {
+                            $set: {
+                                'vouchers.$.paid_amount':
+                                    Data.paid_amount,
+
+                                'vouchers.$.due_amount':
+                                    Data.due,
+
+                                'vouchers.$.payment_status':
+                                    Data.payment_status,
+
+                                'vouchers.$.discount':
+                                    Data.discount
+                            },
+
+                            $push: {
+                                transections: transection
+                            }
+                        }
+                    );
+
+                if (result.modifiedCount > 0) {
+                    return res.send({
+                        success: true,
+                        message: 'updated'
+                    });
+                }
+
+                return res.status(404).send({
+                    success: false,
+                    message: 'Voucher not found'
+                });
+
+            } catch (err) {
+                console.error('API route error:', err);
+
+                return res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
             }
         });
         app.put('/hour_rate/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const bodyData = req.body;
-            const result = await staffsCollection.updateOne(filter, {
-                $set: {
-                    hour_rate: bodyData.hour_rate
-                }
-            })
-            res.send(result);
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const bodyData = req.body;
+
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        hour_rate: bodyData.hour_rate
+                    }
+                });
+
+                res.send(result);
+            } catch (err) {
+                console.error('hour_rate error:', err);
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
+            }
         });
+
+
         app.put('/payback_loan/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const bodyData = req.body;
-            const result = await staffsCollection.updateOne(filter, {
-                $set: {
-                    withdrawal_amount: bodyData.withdrawal_amount,
-                    available_balance: bodyData.available_balance
-                }
-            });
-            res.send(result);
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const bodyData = req.body;
+
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        withdrawal_amount: bodyData.withdrawal_amount,
+                        available_balance: bodyData.available_balance
+                    }
+                });
+
+                res.send(result);
+            } catch (err) {
+                console.error('payback_loan error:', err);
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
+            }
         });
+
 
         app.get('/products', async (req, res) => {
-            const result = await productsCollection.find().toArray();
-            res.send(result);
-        });
-        app.post('/products', async (req, res) => {
-            const product = req.body;
-            const result = await productsCollection.insertOne(product);
-            res.send(result);
-        });
-        app.delete('/products/:id', async (req, res) => {
-            const id = req.params.id;
-            const product = req.body;
-            const filter = { _id: new ObjectId(id) };
-            const result = await productsCollection.deleteOne(filter);
-            res.send(result);
-        });
-        app.put('/replace_staff/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const bodyData = req.body;
-            const result = await staffsCollection.updateOne(filter, {
-                $set: {
-                    email: bodyData.email,
-                    uid: bodyData.uid
-                }
-            });
-            res.send(result);
-        });
-        app.put('/change_time/:id', async (req, res) => {
-            const id = req.params.id;
-            const filter = { _id: new ObjectId(id) };
-            const bodyData = req.body;
-            if (bodyData.name === 'today_enter1_time') {
-                const result = await staffsCollection.updateOne(filter, {
-                    $set: {
-                        today_enter1_time: bodyData.time,
-                    }
-                });
+            try {
+                const result = await productsCollection.find().toArray();
                 res.send(result);
-            }
-            if (bodyData.name === 'today_exit1_time') {
-                const result = await staffsCollection.updateOne(filter, {
-                    $set: {
-                        today_exit1_time: bodyData.time,
-                    }
+            } catch (err) {
+                console.error('products GET error:', err);
+                res.status(500).send({
+                    error: 'Failed to fetch products',
+                    details: err.message
                 });
-                res.send(result);
-            }
-            if (bodyData.name === 'today_enter2_time') {
-                const result = await staffsCollection.updateOne(filter, {
-                    $set: {
-                        today_enter2_time: bodyData.time,
-                    }
-                });
-                res.send(result);
-            }
-            if (bodyData.name === 'today_exit2_time') {
-                const result = await staffsCollection.updateOne(filter, {
-                    $set: {
-                        today_exit2_time: bodyData.time,
-                    }
-                });
-                res.send(result);
             }
         });
 
+
+        app.post('/products', async (req, res) => {
+            try {
+                const product = req.body;
+
+                const result = await productsCollection.insertOne(product);
+
+                res.send(result);
+            } catch (err) {
+                console.error('products POST error:', err);
+                res.status(500).send({
+                    error: 'Failed to add product',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.delete('/products/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const product = req.body;
+                const filter = { _id: new ObjectId(id) };
+
+                const result = await productsCollection.deleteOne(filter);
+
+                res.send(result);
+            } catch (err) {
+                console.error('products DELETE error:', err);
+                res.status(500).send({
+                    error: 'Failed to delete product',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.put('/replace_staff/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const bodyData = req.body;
+
+                const result = await staffsCollection.updateOne(filter, {
+                    $set: {
+                        email: bodyData.email,
+                        uid: bodyData.uid
+                    }
+                });
+
+                res.send(result);
+            } catch (err) {
+                console.error('replace_staff error:', err);
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.put('/change_time/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                const filter = { _id: new ObjectId(id) };
+                const bodyData = req.body;
+
+                if (bodyData.name === 'today_enter1_time') {
+                    const result = await staffsCollection.updateOne(filter, {
+                        $set: {
+                            today_enter1_time: bodyData.time,
+                        }
+                    });
+
+                    res.send(result);
+                }
+
+                if (bodyData.name === 'today_exit1_time') {
+                    const result = await staffsCollection.updateOne(filter, {
+                        $set: {
+                            today_exit1_time: bodyData.time,
+                        }
+                    });
+
+                    res.send(result);
+                }
+
+                if (bodyData.name === 'today_enter2_time') {
+                    const result = await staffsCollection.updateOne(filter, {
+                        $set: {
+                            today_enter2_time: bodyData.time,
+                        }
+                    });
+
+                    res.send(result);
+                }
+
+                if (bodyData.name === 'today_exit2_time') {
+                    const result = await staffsCollection.updateOne(filter, {
+                        $set: {
+                            today_exit2_time: bodyData.time,
+                        }
+                    });
+
+                    res.send(result);
+                }
+            } catch (err) {
+                console.error('change_time error:', err);
+                res.status(500).send({
+                    error: 'Time update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
         app.put('/clear_bonus', async (req, res) => {
-            const bodyData = req.body;
-            const existing = await staffBonusCollection.findOne({});
-            if (bodyData.name === 'first_entry') {
-                const result = await staffBonusCollection.updateOne(
-                    { _id: existing._id },
-                    {
-                        $set: {
-                            first_entry: { time: '', uid: '' },
+            try {
+                const bodyData = req.body;
+                const existing = await staffBonusCollection.findOne({});
+
+                if (bodyData.name === 'first_entry') {
+                    const result = await staffBonusCollection.updateOne(
+                        { _id: existing._id },
+                        {
+                            $set: {
+                                first_entry: { time: '', uid: '' },
+                            }
                         }
-                    }
-                );
-                res.send(result);
-            }
-            if (bodyData.name === 'second_entry') {
-                const result = await staffBonusCollection.updateOne(
-                    { _id: existing._id },
-                    {
-                        $set: {
-                            second_entry: { time: '', uid: '' },
+                    );
+
+                    res.send(result);
+                }
+
+                if (bodyData.name === 'second_entry') {
+                    const result = await staffBonusCollection.updateOne(
+                        { _id: existing._id },
+                        {
+                            $set: {
+                                second_entry: { time: '', uid: '' },
+                            }
                         }
-                    }
-                );
-                res.send(result);
+                    );
+
+                    res.send(result);
+                }
+            } catch (err) {
+                console.error('clear_bonus error:', err);
+                res.status(500).send({
+                    error: 'Bonus clear failed',
+                    details: err.message
+                });
             }
-        })
+        });
 
 
         app.patch('/staff/remove_attendance/:id', async (req, res) => {
@@ -1257,32 +2409,64 @@ async function run() {
             const { dateToRemove } = req.body;
 
             try {
-                const staff = await staffsCollection.findOne({ _id: new ObjectId(id) });
-                if (!staff) return res.status(404).send({ message: 'Staff not found' });
+                const staff = await staffsCollection.findOne({
+                    _id: new ObjectId(id)
+                });
+
+                if (!staff) {
+                    return res.status(404).send({
+                        message: 'Staff not found'
+                    });
+                }
 
                 const oldDetails = staff.current_month_details || [];
-                // Find the day to delete
-                const dayToDelete = oldDetails.find(item => item.current_date === dateToRemove);
-                if (!dayToDelete) return res.status(404).send({ message: 'Date not found' });
 
-                // ✅ Now recalculate totals from the updatedDetails array
+                const dayToDelete = oldDetails.find(
+                    item => item.current_date === dateToRemove
+                );
+
+                if (!dayToDelete) {
+                    return res.status(404).send({
+                        message: 'Date not found'
+                    });
+                }
+
                 let total_income = 0;
                 let bonus = 0;
                 let available_balance = 0;
                 let total_working_hour = 0;
                 let total_working_minute = 0;
 
-                const previousTotalWorkingMinute = (staff.total_working_hour * 60) + staff.total_working_minute;
-                const deletedTotalWorkingMinute = (dayToDelete.total_hour * 60) + dayToDelete.total_minute;
-                const updatedTotalWorkingMinute = previousTotalWorkingMinute - deletedTotalWorkingMinute;
-                total_income = parseFloat((staff.total_income - dayToDelete.total_earn).toFixed(2));
-                bonus = staff.bonus - dayToDelete.today_bonus;
-                available_balance = parseFloat((staff.available_balance - dayToDelete.total_earn).toFixed(2));
-                total_working_hour = Math.floor(updatedTotalWorkingMinute / 60);
-                total_working_minute = updatedTotalWorkingMinute % 60;
+                const previousTotalWorkingMinute =
+                    (staff.total_working_hour * 60) +
+                    staff.total_working_minute;
 
+                const deletedTotalWorkingMinute =
+                    (dayToDelete.total_hour * 60) +
+                    dayToDelete.total_minute;
 
-                // ✅ Update the document
+                const updatedTotalWorkingMinute =
+                    previousTotalWorkingMinute -
+                    deletedTotalWorkingMinute;
+
+                total_income = parseFloat(
+                    (staff.total_income - dayToDelete.total_earn).toFixed(2)
+                );
+
+                bonus =
+                    staff.bonus -
+                    dayToDelete.today_bonus;
+
+                available_balance = parseFloat(
+                    (staff.available_balance - dayToDelete.total_earn).toFixed(2)
+                );
+
+                total_working_hour =
+                    Math.floor(updatedTotalWorkingMinute / 60);
+
+                total_working_minute =
+                    updatedTotalWorkingMinute % 60;
+
                 const result = await staffsCollection.updateOne(
                     { _id: new ObjectId(id) },
                     {
@@ -1294,23 +2478,41 @@ async function run() {
                             total_working_minute
                         },
                         $pull: {
-                            current_month_details: { current_date: dateToRemove }
+                            current_month_details: {
+                                current_date: dateToRemove
+                            }
                         }
                     }
                 );
 
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ message: '❌ Server error', error: err.message });
+                console.error('remove_attendance error:', err);
+
+                res.status(500).send({
+                    message: '❌ Server error',
+                    error: err.message
+                });
             }
         });
+
+
         app.patch('/edit_voucher/:id', async (req, res) => {
             const { id } = req.params;
-            const { voucher_no, products, total, due_amount, status } = req.body;
+            const {
+                voucher_no,
+                products,
+                total,
+                due_amount,
+                status
+            } = req.body;
 
             try {
-                const filter = { _id: new ObjectId(id), 'vouchers.voucher_no': voucher_no };
-                // ✅ Update the document
+                const filter = {
+                    _id: new ObjectId(id),
+                    'vouchers.voucher_no': voucher_no
+                };
+
                 const result = await clientCornerCollection.updateOne(
                     filter,
                     {
@@ -1325,16 +2527,30 @@ async function run() {
 
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ message: '❌ Server error', error: err.message });
+                console.error('edit_voucher error:', err);
+
+                res.status(500).send({
+                    message: '❌ Server error',
+                    error: err.message
+                });
             }
         });
+
+
         app.patch('/edit_client_data/:id', async (req, res) => {
             const { id } = req.params;
-            const { name, on_behalf, address, mobile_no } = req.body;
+            const {
+                name,
+                on_behalf,
+                address,
+                mobile_no
+            } = req.body;
 
             try {
-                const filter = { _id: new ObjectId(id) };
-                // ✅ Update the document
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
                 const result = await clientCornerCollection.updateOne(
                     filter,
                     {
@@ -1349,16 +2565,29 @@ async function run() {
 
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ message: '❌ Server error', error: err.message });
+                console.error('edit_client_data error:', err);
+
+                res.status(500).send({
+                    message: '❌ Server error',
+                    error: err.message
+                });
             }
         });
+
+
         app.patch('/air_ticket_edit_client_data/:id', async (req, res) => {
             const { id } = req.params;
-            const { name, address, mobile_no } = req.body;
+            const {
+                name,
+                address,
+                mobile_no
+            } = req.body;
 
             try {
-                const filter = { _id: new ObjectId(id) };
-                // ✅ Update the document
+                const filter = {
+                    _id: new ObjectId(id)
+                };
+
                 const result = await airTicketClientCornerCollection.updateOne(
                     filter,
                     {
@@ -1372,180 +2601,395 @@ async function run() {
 
                 res.send(result);
             } catch (err) {
-                res.status(500).send({ message: '❌ Server error', error: err.message });
+                console.error('air_ticket_edit_client_data error:', err);
+
+                res.status(500).send({
+                    message: '❌ Server error',
+                    error: err.message
+                });
             }
         });
+
 
         app.get('/daily_transactions', async (req, res) => {
             try {
                 const result = await dailyTransactionsCollection.findOne({});
                 res.send(result);
             } catch (error) {
-                console.log(error)
-                res.status(500).send({ error: 'Update failed', details: error });
-            }
-        })
-        app.patch('/daily_revenue_transactions', async (req, res) => {
-            const trData = req.body;
-            const { date, amount, category, comment } = trData;
-            const existing = await dailyTransactionsCollection.findOne({});
-            const filter = { _id: existing._id };
+                console.error('daily_transactions error:', error);
 
-            if (category === 'Computer') {
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $inc: {
-                            computer_revenues: amount
-                        },
-                        $set: {
-                            date: date
+                res.status(500).send({
+                    error: 'Failed to fetch daily transactions',
+                    details: error.message
+                });
+            }
+        });
+
+
+        app.patch('/daily_revenue_transactions', async (req, res) => {
+            try {
+                const trData = req.body;
+
+                const {
+                    date,
+                    amount,
+                    category,
+                    comment
+                } = trData;
+
+                const existing = await dailyTransactionsCollection.findOne({});
+
+                if (!existing) {
+                    return res.status(404).send({
+                        error: 'Daily transaction document not found'
+                    });
+                }
+
+                const filter = {
+                    _id: existing._id
+                };
+
+                if (category === 'Computer') {
+                    const result = await dailyTransactionsCollection.updateOne(
+                        filter,
+                        {
+                            $inc: {
+                                computer_revenues: amount
+                            },
+                            $set: {
+                                date: date
+                            }
                         }
-                    }
-                )
-                res.send(result);
-            } else if (category === 'Stationary') {
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $inc: {
-                            stationary_revenues: amount
-                        },
-                        $set: {
-                            date: date
+                    );
+
+                    res.send(result);
+
+                } else if (category === 'Stationary') {
+                    const result = await dailyTransactionsCollection.updateOne(
+                        filter,
+                        {
+                            $inc: {
+                                stationary_revenues: amount
+                            },
+                            $set: {
+                                date: date
+                            }
                         }
-                    }
-                )
-                res.send(result);
-            } else if (category === 'Photocopy') {
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $inc: {
-                            photocopy_revenues: amount
-                        },
-                        $set: {
-                            date: date
+                    );
+
+                    res.send(result);
+
+                } else if (category === 'Photocopy') {
+                    const result = await dailyTransactionsCollection.updateOne(
+                        filter,
+                        {
+                            $inc: {
+                                photocopy_revenues: amount
+                            },
+                            $set: {
+                                date: date
+                            }
                         }
-                    }
-                )
-                res.send(result);
-            } else if (category === 'Others') {
+                    );
+
+                    res.send(result);
+
+                } else if (category === 'Others') {
+                    const result = await dailyTransactionsCollection.updateOne(
+                        filter,
+                        {
+                            $push: {
+                                others_revenues: {
+                                    amount,
+                                    comment
+                                }
+                            },
+                            $set: {
+                                date: date
+                            }
+                        }
+                    );
+
+                    res.send(result);
+                }
+            } catch (err) {
+                console.error('daily_revenue_transactions error:', err);
+
+                res.status(500).send({
+                    error: 'Revenue transaction update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.patch('/daily_expense_transactions', async (req, res) => {
+            try {
+                const trData = req.body;
+
+                const {
+                    date,
+                    amount,
+                    comment
+                } = trData;
+
+                const exData = {
+                    amount,
+                    comment
+                };
+
+                const existing = await dailyTransactionsCollection.findOne({});
+
+                if (!existing) {
+                    return res.status(404).send({
+                        error: 'Daily transaction document not found'
+                    });
+                }
+
+                const filter = {
+                    _id: existing._id
+                };
+
                 const result = await dailyTransactionsCollection.updateOne(
                     filter,
                     {
                         $push: {
-                            others_revenues: { amount, comment }
+                            expenses: exData
                         },
                         $set: {
                             date: date
                         }
                     }
-                )
+                );
+
                 res.send(result);
+            } catch (err) {
+                console.error('daily_expense_transactions error:', err);
+
+                res.status(500).send({
+                    error: 'Expense transaction update failed',
+                    details: err.message
+                });
             }
-        })
-        app.patch('/daily_expense_transactions', async (req, res) => {
-            const trData = req.body;
-            const { date, amount, comment } = trData;
-            const exData = { amount, comment }
-            const existing = await dailyTransactionsCollection.findOne({});
-            const filter = { _id: existing._id };
-            const result = await dailyTransactionsCollection.updateOne(
-                filter,
-                {
-                    $push: {
-                        expenses: exData
-                    },
-                    $set: {
-                        date: date
-                    }
-                }
-            )
-            res.send(result);
-        })
+        });
+
+
         app.patch('/reset_daily_transactions', async (req, res) => {
-            const receivedData = req.body;
-            const { update_info, category, date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses } = receivedData;
-            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses }
-            const existing = await dailyTransactionsCollection.findOne({});
-            const filter = { _id: existing._id };
-            const result = await dailyTransactionsCollection.updateOne(
-                filter,
-                {
-                    $push: {
-                        summary: trData
-                    },
-                    $set: {
-                        date: update_info?.update_date,
-                        computer_revenues: category === 'Computer' ? update_info?.amount : 0,
-                        stationary_revenues: category === 'Stationary' ? update_info?.amount : 0,
-                        photocopy_revenues: category === 'Photocopy' ? update_info?.amount : 0,
-                        others_revenues: category === 'Others' ? [{ amount: update_info?.amount, comment: update_info?.comment }] : [],
-                        expenses: category === 'Expense' ? [{ amount: update_info?.amount, comment: update_info?.comment }] : []
-                    }
+            try {
+                const receivedData = req.body;
+
+                const {
+                    update_info,
+                    category,
+                    date,
+                    computer_revenues,
+                    stationary_revenues,
+                    photocopy_revenues,
+                    others_revenues,
+                    expenses
+                } = receivedData;
+
+                const trData = {
+                    date,
+                    computer_revenues,
+                    stationary_revenues,
+                    photocopy_revenues,
+                    others_revenues,
+                    expenses
+                };
+
+                const existing = await dailyTransactionsCollection.findOne({});
+
+                if (!existing) {
+                    return res.status(404).send({
+                        error: 'Daily transaction document not found'
+                    });
                 }
-            )
-            res.send(result);
-        })
-        app.patch('/close_daily_transactions', async (req, res) => {
-            const receivedData = req.body;
-            const { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses } = receivedData;
-            const trData = { date, computer_revenues, stationary_revenues, photocopy_revenues, others_revenues, expenses }
-            const existing = await dailyTransactionsCollection.findOne({});
-            const filter = { _id: existing._id };
-            const result = await dailyTransactionsCollection.updateOne(
-                filter,
-                {
-                    $push: {
-                        summary: trData
-                    },
-                    $set: {
-                        computer_revenues: 0,
-                        stationary_revenues: 0,
-                        photocopy_revenues: 0,
-                        others_revenues: [],
-                        expenses: []
-                    }
-                }
-            )
-            res.send(result);
-        })
-        app.patch('/update_expenses', async (req, res) => {
-            const receivedData = req.body;
-            const existing = await dailyTransactionsCollection.findOne({});
-            const filter = { _id: existing._id };
-            if (receivedData?.category === 'expenses') {
+
+                const filter = {
+                    _id: existing._id
+                };
+
                 const result = await dailyTransactionsCollection.updateOne(
                     filter,
                     {
+                        $push: {
+                            summary: trData
+                        },
                         $set: {
-                            expenses: receivedData?.update
+                            date: update_info?.update_date,
+                            computer_revenues:
+                                category === 'Computer'
+                                    ? update_info?.amount
+                                    : 0,
+                            stationary_revenues:
+                                category === 'Stationary'
+                                    ? update_info?.amount
+                                    : 0,
+                            photocopy_revenues:
+                                category === 'Photocopy'
+                                    ? update_info?.amount
+                                    : 0,
+                            others_revenues:
+                                category === 'Others'
+                                    ? [{
+                                        amount: update_info?.amount,
+                                        comment: update_info?.comment
+                                    }]
+                                    : [],
+                            expenses:
+                                category === 'Expense'
+                                    ? [{
+                                        amount: update_info?.amount,
+                                        comment: update_info?.comment
+                                    }]
+                                    : []
                         }
                     }
-                )
+                );
+
                 res.send(result);
-            } else if (receivedData?.category === 'others_revenues') {
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $set: {
-                            others_revenues: receivedData?.update
-                        }
-                    }
-                )
-                res.send(result);
+            } catch (err) {
+                console.error('reset_daily_transactions error:', err);
+
+                res.status(500).send({
+                    error: 'Daily transaction reset failed',
+                    details: err.message
+                });
             }
-        })
+        });
+
+
+        app.patch('/close_daily_transactions', async (req, res) => {
+            try {
+                const receivedData = req.body;
+
+                const {
+                    date,
+                    computer_revenues,
+                    stationary_revenues,
+                    photocopy_revenues,
+                    others_revenues,
+                    expenses
+                } = receivedData;
+
+                const trData = {
+                    date,
+                    computer_revenues,
+                    stationary_revenues,
+                    photocopy_revenues,
+                    others_revenues,
+                    expenses
+                };
+
+                const existing = await dailyTransactionsCollection.findOne({});
+
+                if (!existing) {
+                    return res.status(404).send({
+                        error: 'Daily transaction document not found'
+                    });
+                }
+
+                const filter = {
+                    _id: existing._id
+                };
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    filter,
+                    {
+                        $push: {
+                            summary: trData
+                        },
+                        $set: {
+                            computer_revenues: 0,
+                            stationary_revenues: 0,
+                            photocopy_revenues: 0,
+                            others_revenues: [],
+                            expenses: []
+                        }
+                    }
+                );
+
+                res.send(result);
+            } catch (err) {
+                console.error('close_daily_transactions error:', err);
+
+                res.status(500).send({
+                    error: 'Daily transaction close failed',
+                    details: err.message
+                });
+            }
+        });
+
+
+        app.patch('/update_expenses', async (req, res) => {
+            try {
+                const receivedData = req.body;
+
+                const existing = await dailyTransactionsCollection.findOne({});
+
+                if (!existing) {
+                    return res.status(404).send({
+                        error: 'Daily transaction document not found'
+                    });
+                }
+
+                const filter = {
+                    _id: existing._id
+                };
+
+                if (receivedData?.category === 'expenses') {
+                    const result = await dailyTransactionsCollection.updateOne(
+                        filter,
+                        {
+                            $set: {
+                                expenses: receivedData?.update
+                            }
+                        }
+                    );
+
+                    res.send(result);
+
+                } else if (receivedData?.category === 'others_revenues') {
+                    const result = await dailyTransactionsCollection.updateOne(
+                        filter,
+                        {
+                            $set: {
+                                others_revenues: receivedData?.update
+                            }
+                        }
+                    );
+
+                    res.send(result);
+                }
+            } catch (err) {
+                console.error('update_expenses error:', err);
+
+                res.status(500).send({
+                    error: 'Expense/revenue update failed',
+                    details: err.message
+                });
+            }
+        });
+
+
         app.patch("/delete_summary", async (req, res) => {
             try {
-
-                const { startDate, endDate } = req.body;
+                const {
+                    startDate,
+                    endDate
+                } = req.body;
 
                 const start = new Date(startDate);
                 const end = new Date(endDate);
 
                 const doc = await dailyTransactionsCollection.findOne({});
+
+                if (!doc) {
+                    return res.status(404).send({
+                        error: 'Daily transaction document not found'
+                    });
+                }
 
                 const filteredSummary = doc.summary.filter(item => {
 
@@ -1559,15 +3003,21 @@ async function run() {
                 const result = await dailyTransactionsCollection.updateOne(
                     {},
                     {
-                        $set: { summary: filteredSummary }
+                        $set: {
+                            summary: filteredSummary
+                        }
                     }
                 );
 
                 res.send(result);
 
             } catch (error) {
-                console.log(error);
-                res.status(500).send({ error: "Delete failed" });
+                console.error('delete_summary error:', error);
+
+                res.status(500).send({
+                    error: "Delete failed",
+                    details: error.message
+                });
             }
         });
 
