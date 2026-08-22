@@ -89,11 +89,40 @@ async function run() {
         const productsCollection = client.db('Bismillah_Enterprise').collection('products');
         const tokenCollection = client.db('Bismillah_Enterprise').collection('tokens');
         const dailyTransactionsCollection = client.db('Bismillah_Enterprise').collection('daily_transactions');
+        const colorplateCollection = client.db('Bismillah_Enterprise').collection('colorplate');
 
         app.get("/shop_code", async (req, res) => {
             const shopCode = await shopCodeCollection.findOne({});
             res.send(shopCode);
         })
+        app.get('/colorplate/:serial', async (req, res) => {
+            try {
+                const serial = Number(req.params.serial);
+
+                const colorData = await colorplateCollection.findOne({
+                    serial: serial
+                });
+
+                if (!colorData) {
+                    return res.status(404).send({
+                        message: 'Color not found',
+                        serial
+                    });
+                }
+
+                res.send({
+                    serial: colorData.serial,
+                    color: colorData.color
+                });
+            }
+            catch (error) {
+                console.error('Color plate error:', error);
+
+                res.status(500).send({
+                    message: 'Failed to load color'
+                });
+            }
+        });
 
         app.post('/shop_code', async (req, res) => {
             const options = { upsert: true };
@@ -116,20 +145,31 @@ async function run() {
         });
         app.put('/additional_request_approve/:uid', async (req, res) => {
             const uid = req.params.uid;
+            console.log(uid)
             const filter = { uid: uid };
-            const options = { upsert: true };
+
             const updatedStatus = req.body;
+
             const movementStatus = {
                 $set: {
-                    additional_movement_status: updatedStatus.additional_movement_status
+                    additional_movement_status:
+                        updatedStatus.additional_movement_status
                 }
             };
 
             try {
-                const result = await staffsCollection.updateOne(filter, movementStatus, options);
+                const result = await staffsCollection.updateOne(
+                    filter,
+                    movementStatus
+                );
+
                 res.send(result);
+
             } catch (err) {
-                res.status(500).send({ error: 'Update failed', details: err });
+                res.status(500).send({
+                    error: 'Update failed',
+                    details: err
+                });
             }
         });
         app.get("/staffs", async (req, res) => {
@@ -675,41 +715,81 @@ async function run() {
             res.send(result);
         });
         app.put('/shop_transections', async (req, res) => {
-            const filter = { _id: new ObjectId(process.env.Shop_Transections_ObjectId) }
-            const bodyData = req.body;
-            const transection = {
-                transection_id: bodyData.transection_id,
-                transection_date: bodyData.transection_date,
-                transection_amount: bodyData.transection_amount,
-                transection_explaination: bodyData.transection_explaination
-            }
-            if (bodyData.transection_type === 'revenue') {
-                const updateDoc = {
-                    $push: {
-                        revenue_transections: transection
-                    },
-                    $set: {
-                        total_revenue_amount: bodyData.total_revenue_amount,
-                        hand_on_cash: bodyData.hand_on_cash
-                    }
+
+            try {
+
+                const filter = {
+                    _id: new ObjectId(process.env.Shop_Transections_ObjectId)
+                };
+
+                const bodyData = req.body;
+
+                const transection = {
+                    transection_id: bodyData.transection_id || `${Date.now()}`,
+                    transection_date: bodyData.transection_date,
+                    transection_amount: Number(bodyData.transection_amount),
+                    transection_category: bodyData.transection_category || '',
+                    transection_explaination: bodyData.transection_explaination || ''
+                };
+
+                if (bodyData.transection_type === 'revenue') {
+
+                    const updateDoc = {
+                        $push: {
+                            revenue_transections: transection
+                        },
+                        $set: {
+                            total_revenue_amount: Number(bodyData.total_revenue_amount),
+                            hand_on_cash: Number(bodyData.hand_on_cash)
+                        }
+                    };
+
+                    const result =
+                        await shopTransectionsCollection.updateOne(
+                            filter,
+                            updateDoc
+                        );
+
+                    return res.send(result);
                 }
-                const result = await shopTransectionsCollection.updateOne(filter, updateDoc);
-                res.send(result);
-            }
-            else {
-                const updateDoc = {
-                    $push: {
-                        expense_transections: transection
-                    },
-                    $set: {
-                        total_expense_amount: bodyData.total_expense_amount,
-                        hand_on_cash: bodyData.hand_on_cash
-                    }
+
+                if (bodyData.transection_type === 'expense') {
+
+                    const updateDoc = {
+                        $push: {
+                            expense_transections: transection
+                        },
+                        $set: {
+                            total_expense_amount: Number(bodyData.total_expense_amount),
+                            hand_on_cash: Number(bodyData.hand_on_cash)
+                        }
+                    };
+
+                    const result =
+                        await shopTransectionsCollection.updateOne(
+                            filter,
+                            updateDoc
+                        );
+
+                    return res.send(result);
                 }
-                const result = await shopTransectionsCollection.updateOne(filter, updateDoc);
-                res.send(result);
+
+                return res.status(400).send({
+                    acknowledged: false,
+                    message: 'Invalid transaction type'
+                });
+
+            } catch (error) {
+
+                console.error('Shop transaction error:', error);
+
+                return res.status(500).send({
+                    acknowledged: false,
+                    message: 'Internal server error',
+                    error: error.message
+                });
             }
-        })
+        });
         app.put('/self_transections', async (req, res) => {
             const filter = await selfTransectionsCollection.findOne({})
             const bodyData = req.body;
