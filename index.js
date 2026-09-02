@@ -412,59 +412,58 @@ async function run() {
         app.put('/staffs_daily_time/:id', async (req, res) => {
             try {
                 const id = req.params.id;
-                const filter = { _id: new ObjectId(id) };
-                const options = { upsert: true };
                 const updatedTime = req.body;
+                const filter = { _id: new ObjectId(id) };
+                const staff = await staffsCollection.findOne(filter);
 
-                let attendance;
-
-                if (updatedTime.name == 'today_enter1_time') {
-                    attendance = {
-                        $set: {
-                            today_enter1_time: updatedTime.clickedTime,
-                            today_date: updatedTime.today_date
-                        }
-                    };
-                }
-                else if (updatedTime.name == 'today_exit1_time') {
-                    attendance = {
-                        $set: {
-                            today_exit1_time: updatedTime.clickedTime
-                        }
-                    };
-                }
-                else if (updatedTime.name == 'today_enter2_time') {
-                    attendance = {
-                        $set: {
-                            today_enter2_time: updatedTime.clickedTime
-                        }
-                    };
-                }
-                else if (updatedTime.name == 'today_exit2_time') {
-                    attendance = {
-                        $set: {
-                            today_exit2_time: updatedTime.clickedTime
-                        }
-                    };
+                if (!staff) {
+                    return res.status(404).send({ acknowledged: false, message: 'Staff not found' });
                 }
 
-                const result = await staffsCollection.updateOne(
-                    filter,
-                    attendance,
-                    options
-                );
+                const submittedDate = updatedTime.current_date || updatedTime.currentDate;
+                const submittedToday = submittedDate && Array.isArray(staff.current_month_details)
+                    && staff.current_month_details.some(item => item?.current_date === submittedDate);
 
-                res.send(result);
+                // Once work time for a date has been submitted, no attendance can be added again.
+                if (submittedToday) {
+                    return res.status(409).send({
+                        acknowledged: false,
+                        message: 'Attendance for this date has already been submitted.'
+                    });
+                }
 
+                // Never allow the same attendance slot to be overwritten by repeated requests.
+                if (updatedTime.name && staff[updatedTime.name]) {
+                    return res.status(409).send({
+                        acknowledged: false,
+                        message: 'This attendance time has already been recorded.'
+                    });
+                }
+
+                const setData = {};
+                if (updatedTime.name === 'today_enter1_time') {
+                    setData.today_enter1_time = updatedTime.clickedTime;
+                    setData.today_date = updatedTime.today_date;
+                } else if (updatedTime.name === 'today_exit1_time') {
+                    setData.today_exit1_time = updatedTime.clickedTime;
+                } else if (updatedTime.name === 'today_enter2_time') {
+                    setData.today_enter2_time = updatedTime.clickedTime;
+                } else if (updatedTime.name === 'today_exit2_time') {
+                    setData.today_exit2_time = updatedTime.clickedTime;
+                } else {
+                    return res.status(400).send({ acknowledged: false, message: 'Invalid attendance field.' });
+                }
+
+                const result = await staffsCollection.updateOne(filter, { $set: setData });
+                return res.send(result);
             } catch (err) {
                 console.error(err);
-                res.status(500).send({
+                return res.status(500).send({
                     error: 'Update failed',
                     details: err.message
                 });
             }
         });
-
 
         app.put('/additional_movements/:id', async (req, res) => {
             try {
@@ -594,9 +593,30 @@ async function run() {
             try {
                 const id = req.params.id;
                 const bodyData = req.body;
+                const filter = { _id: new ObjectId(id) };
+                const staff = await staffsCollection.findOne(filter);
+
+                if (!staff) {
+                    return res.status(404).send({ error: 'Staff not found' });
+                }
+
+                const submissionDate = bodyData.currentDate;
+                if (!submissionDate) {
+                    return res.status(400).send({ error: 'Current date is required.' });
+                }
+
+                // Server-side protection: one completed work-time submission per calendar date.
+                const alreadySubmitted = Array.isArray(staff.current_month_details)
+                    && staff.current_month_details.some(item => item?.current_date === submissionDate);
+
+                if (alreadySubmitted) {
+                    return res.status(409).send({
+                        message: 'Work time for this date has already been submitted.'
+                    });
+                }
 
                 const todaySummary = {
-                    current_date: bodyData.currentDate,
+                    current_date: submissionDate,
                     current_day_name: bodyData.currentDayName,
                     today_enter1_time: bodyData.today_enter1_time,
                     today_exit1_time: bodyData.today_exit1_time,
@@ -610,15 +630,26 @@ async function run() {
                     additional_movement_minute: bodyData.additional_movement_minute
                 };
 
-                const filter = {
-                    _id: new ObjectId(id)
-                };
+                // Keep the original behavior for incomplete attendance, but never create a duplicate daily record.
+                if (bodyData.today_exit1_time === '' && bodyData.today_exit2_time === '') {
+                    await staffsCollection.updateOne(filter, {
+                        $set: {
+                            today_date: bodyData.today_date,
+                            today_enter1_time: '',
+                            today_exit1_time: '',
+                            today_enter2_time: '',
+                            today_exit2_time: '',
+                            additional_enter_time: '',
+                            additional_exit_time: '',
+                            additional_movement_hour: 0,
+                            additional_movement_minute: 0
+                        }
+                    });
+                    return res.send({ message: 'Work time submitted successfully' });
+                }
 
-                // Update database: Push daily data & reset today's values
                 const updateDoc = {
-                    $push: {
-                        current_month_details: todaySummary
-                    },
+                    $push: { current_month_details: todaySummary },
                     $set: {
                         total_working_hour: bodyData.total_working_hour,
                         total_working_minute: bodyData.total_working_minute,
@@ -637,56 +668,32 @@ async function run() {
                     }
                 };
 
-                const ErrorDoc = {
-                    $set: {
-                        today_date: bodyData.today_date,
-                        today_enter1_time: '',
-                        today_exit1_time: '',
-                        today_enter2_time: '',
-                        today_exit2_time: '',
-                        additional_enter_time: '',
-                        additional_exit_time: '',
-                        additional_movement_hour: 0,
-                        additional_movement_minute: 0
-                    }
-                };
+                // Re-check in the update filter to protect against two simultaneous submit requests.
+                const atomicResult = await staffsCollection.updateOne(
+                    {
+                        ...filter,
+                        current_month_details: {
+                            $not: { $elemMatch: { current_date: submissionDate } }
+                        }
+                    },
+                    updateDoc
+                );
 
-                if (
-                    bodyData.today_exit1_time === '' &&
-                    bodyData.today_exit2_time === ''
-                ) {
-                    await staffsCollection.updateOne(
-                        filter,
-                        ErrorDoc,
-                        { upsert: true }
-                    );
-
-                    res.send({
-                        message: 'Work time submitted successfully'
-                    });
-                }
-                else {
-                    await staffsCollection.updateOne(
-                        filter,
-                        updateDoc,
-                        { upsert: true }
-                    );
-
-                    res.send({
-                        message: 'Work time submitted successfully'
+                if (atomicResult.modifiedCount === 0) {
+                    return res.status(409).send({
+                        message: 'Work time for this date has already been submitted.'
                     });
                 }
 
+                return res.send({ message: 'Work time submitted successfully' });
             } catch (err) {
                 console.error(err);
-
-                res.status(500).send({
+                return res.status(500).send({
                     error: 'Update failed',
                     details: err.message
                 });
             }
         });
-
 
         app.put('/additional_movement_submit/:id', async (req, res) => {
             try {
@@ -888,141 +895,144 @@ async function run() {
         });
 
         app.put('/staff_bonus', async (req, res) => {
-
             try {
+                const entryData = req.body || {};
+                let existing = await staffBonusCollection.findOne({});
 
-                const entryData = req.body;
-
-                const existing =
-                    await staffBonusCollection.findOne({});
+                if (!existing) {
+                    return res.status(404).send({ acknowledged: false, message: 'Staff bonus settings not found.' });
+                }
 
                 if (entryData.entry_type === 'new day') {
-
-                    const result =
-                        await staffBonusCollection.updateOne(
-                            { _id: existing._id },
-
-                            {
-                                $set: {
-                                    date: entryData.date,
-
-                                    first_entry: {
-                                        time: '',
-                                        uid: ''
-                                    },
-
-                                    second_entry: {
-                                        time: '',
-                                        uid: ''
-                                    }
-                                }
+                    const result = await staffBonusCollection.updateOne(
+                        { _id: existing._id, date: { $ne: entryData.date } },
+                        {
+                            $set: {
+                                date: entryData.date,
+                                first_entry: { time: '', uid: '' },
+                                second_entry: { time: '', uid: '' }
                             }
-                        );
-
-                    res.send(result);
+                        }
+                    );
+                    return res.send(result);
                 }
 
-                if (entryData.entry_type === 'first entry') {
-
-                    const now = new Date();
-
-                    const parseTime = (timeStr) => {
-
-                        if (!timeStr) return null;
-
-                        const [time, modifier] =
-                            timeStr.split(' ');
-
-                        let [hours, minutes] =
-                            time.split(':').map(Number);
-
-                        if (
-                            modifier === 'PM' &&
-                            hours !== 12
-                        ) {
-                            hours += 12;
-                        }
-
-                        if (
-                            modifier === 'AM' &&
-                            hours === 12
-                        ) {
-                            hours = 0;
-                        }
-
-                        return hours * 60 + minutes;
-                    };
-
-                    if (
-                        parseTime(entryData.time) <
-                        existing.start_time
-                    ) {
-
-                        const result =
-                            await staffBonusCollection.updateOne(
-                                { _id: existing._id },
-
-                                {
-                                    $set: {
-                                        first_entry: {
-                                            time: '8:00 AM',
-                                            uid: entryData.uid
-                                        }
-                                    }
-                                }
-                            );
-
-                        res.send(result);
-                    }
-
-                    if (
-                        parseTime(entryData.time) >
-                        existing.start_time &&
-                        parseTime(entryData.time) <
-                        existing.end_time
-                    ) {
-
-                        const result =
-                            await staffBonusCollection.updateOne(
-                                { _id: existing._id },
-
-                                {
-                                    $set: {
-                                        first_entry: {
-                                            time: entryData.time,
-                                            uid: entryData.uid
-                                        }
-                                    }
-                                }
-                            );
-
-                        res.send(result);
-                    }
+                if (entryData.entry_type !== 'first entry') {
+                    return res.status(400).send({ acknowledged: false, message: 'Invalid bonus entry type.' });
                 }
 
-                if (entryData.entry_type === 'second entry') {
+                const parseTime = (timeStr) => {
+                    if (!timeStr) return null;
+                    const parts = String(timeStr).trim().toUpperCase().split(/\s+/);
+                    if (parts.length !== 2) return null;
+                    const [time, modifier] = parts;
+                    const values = time.split(':').map(Number);
+                    if (values.length !== 2 || values.some(Number.isNaN)) return null;
+                    let [hours, minutes] = values;
+                    if (modifier === 'PM' && hours !== 12) hours += 12;
+                    if (modifier === 'AM' && hours === 12) hours = 0;
+                    return hours * 60 + minutes;
+                };
 
-                    const result =
-                        await staffBonusCollection.updateOne(
-                            { _id: existing._id },
+                const entryMinutes = parseTime(entryData.time);
+                const startLimit = Number(existing.start_time);
+                const endLimit = Number(existing.end_time);
+                const requestedDate = entryData.date;
 
-                            {
-                                $set: {
-                                    second_entry: {
-                                        time: entryData.time,
-                                        uid: entryData.uid
-                                    }
-                                }
+                if (requestedDate && existing.date !== requestedDate) {
+                    await staffBonusCollection.updateOne(
+                        { _id: existing._id },
+                        {
+                            $set: {
+                                date: requestedDate,
+                                first_entry: { time: '', uid: '' },
+                                second_entry: { time: '', uid: '' }
                             }
-                        );
-
-                    res.send(result);
+                        }
+                    );
+                    existing = { ...existing, date: requestedDate, first_entry: { time: '', uid: '' }, second_entry: { time: '', uid: '' } };
                 }
 
+                if (entryMinutes === null || !Number.isFinite(startLimit) || !Number.isFinite(endLimit)) {
+                    return res.status(400).send({ acknowledged: false, bonus: 0, message: 'Invalid bonus time.' });
+                }
+
+                // Bonus is available from start_time THROUGH end_time (both limits inclusive).
+                if (entryMinutes < startLimit || entryMinutes > endLimit) {
+                    return res.send({ acknowledged: true, bonus: 0, slot: null, message: 'Outside bonus time.' });
+                }
+
+                const uid = String(entryData.uid || '');
+                if (!uid) {
+                    return res.status(400).send({ acknowledged: false, bonus: 0, message: 'Staff UID is required.' });
+                }
+
+                // If this staff member already owns a bonus slot, never give another slot.
+                if (existing.first_entry?.uid === uid) {
+                    return res.send({ acknowledged: true, bonus: 50, slot: 'first_entry', message: 'First bonus already assigned.' });
+                }
+                if (existing.second_entry?.uid === uid) {
+                    return res.send({ acknowledged: true, bonus: 20, slot: 'second_entry', message: 'Second bonus already assigned.' });
+                }
+
+                // Atomic claim for the first eligible staff member.
+                const firstClaim = await staffBonusCollection.updateOne(
+                    {
+                        _id: existing._id,
+                        date: existing.date,
+                        'first_entry.uid': '',
+                        'first_entry.time': '',
+                        'second_entry.uid': { $ne: uid }
+                    },
+                    {
+                        $set: {
+                            first_entry: { time: entryData.time, uid }
+                        }
+                    }
+                );
+
+                if (firstClaim.modifiedCount === 1) {
+                    return res.send({
+                        acknowledged: true,
+                        bonus: 50,
+                        slot: 'first_entry',
+                        message: 'First bonus assigned.'
+                    });
+                }
+
+                // Atomic claim for the second eligible staff member.
+                const secondClaim = await staffBonusCollection.updateOne(
+                    {
+                        _id: existing._id,
+                        date: existing.date,
+                        'second_entry.uid': '',
+                        'second_entry.time': '',
+                        'first_entry.uid': { $ne: uid }
+                    },
+                    {
+                        $set: {
+                            second_entry: { time: entryData.time, uid }
+                        }
+                    }
+                );
+
+                if (secondClaim.modifiedCount === 1) {
+                    return res.send({
+                        acknowledged: true,
+                        bonus: 20,
+                        slot: 'second_entry',
+                        message: 'Second bonus assigned.'
+                    });
+                }
+
+                return res.send({
+                    acknowledged: true,
+                    bonus: 0,
+                    slot: null,
+                    message: 'The two daily bonus slots are already occupied.'
+                });
             } catch (err) {
-
-                console.error('API route error:', err);
-
+                console.error('Staff bonus error:', err);
                 return res.status(500).send({
                     error: 'Internal server error',
                     details: err.message
