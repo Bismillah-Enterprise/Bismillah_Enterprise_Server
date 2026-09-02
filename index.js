@@ -744,307 +744,6 @@ async function run() {
         });
 
 
-        app.put('/transection_details/:id', async (req, res) => {
-            try {
-                const id = req.params.id;
-                const bodyData = req.body;
-
-                const filter = {
-                    _id: new ObjectId(id)
-                };
-
-                const newTransectionsData = {
-                    transection_id: bodyData.transection_id,
-                    transection_date: bodyData.currentDate,
-                    transection_amount: bodyData.transection_amount,
-                    transection_type: bodyData.transection_type,
-                    comment: bodyData.comment
-                };
-
-                const staff = await staffsCollection.findOne(filter);
-
-                // Step 1: If length > 19, remove first transection
-                if (staff?.transections?.length > 19) {
-                    await staffsCollection.updateOne(
-                        filter,
-                        {
-                            $pop: {
-                                transections: -1
-                            }
-                        }
-                    );
-                }
-
-                // Step 2: Push new transection + update balances
-                if (bodyData.transection_type === 'Payback Lend') {
-
-                    const new_withdrawal_amount =
-                        bodyData.previous_withdrawal_amount -
-                        bodyData.transection_amount;
-
-                    const new_available_balance =
-                        bodyData.previous_available_balance +
-                        bodyData.transection_amount;
-
-                    const updateDoc = {
-                        $push: {
-                            transections: newTransectionsData
-                        },
-                        $set: {
-                            withdrawal_amount: new_withdrawal_amount,
-                            available_balance: new_available_balance
-                        }
-                    };
-
-                    const result = await staffsCollection.updateOne(
-                        filter,
-                        updateDoc
-                    );
-
-                    res.send(result);
-                }
-                else {
-
-                    const updateDoc = {
-                        $push: {
-                            transections: newTransectionsData
-                        },
-                        $set: {
-                            withdrawal_amount: bodyData.withdrawal_amount,
-                            available_balance: bodyData.available_balance
-                        }
-                    };
-
-                    const result = await staffsCollection.updateOne(
-                        filter,
-                        updateDoc
-                    );
-
-                    res.send(result);
-                }
-
-            } catch (err) {
-                console.error(err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
-            }
-        });
-
-
-        app.put('/closing_month/:id', async (req, res) => {
-            try {
-                const id = req.params.id;
-                const bodyData = req.body;
-
-                const filter = {
-                    _id: new ObjectId(id)
-                };
-
-                const newIncomeHistory = {
-                    month_name: bodyData.month_name,
-                    total_worked_time:
-                        `${bodyData.total_working_hour} Hour, ${bodyData.total_working_minute} Minute`,
-                    previous_due: bodyData.last_month_due,
-                    total_income: bodyData.total_income,
-                    paid_amount: bodyData.paid_amount,
-                    receiveable_amount: bodyData.last_month_due,
-                    paid_date: bodyData.paid_date,
-                };
-
-                const staff = await staffsCollection.findOne(filter);
-
-                // Step 1: If length > 19, remove first transection
-                if (staff?.income_history?.length > 12) {
-                    await staffsCollection.updateOne(
-                        filter,
-                        {
-                            $pop: {
-                                income_history: -1
-                            }
-                        }
-                    );
-                }
-
-                // Step 2: Push new transection
-                const updateDoc = {
-                    $push: {
-                        income_history: newIncomeHistory
-                    },
-                    $set: {
-                        total_income: 0,
-                        bonus: 0,
-                        fine: 0,
-                        total_working_hour: 0,
-                        total_working_minute: 0,
-                        withdrawal_amount: 0,
-                        available_balance: bodyData.last_month_due,
-                        last_month_due: bodyData.last_month_due,
-                        current_month_details: [],
-                        current_working_month: bodyData.current_working_month
-                    }
-                };
-
-                const result = await staffsCollection.updateOne(
-                    filter,
-                    updateDoc
-                );
-
-                res.send(result);
-
-            } catch (err) {
-                console.error(err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
-            }
-        });
-
-
-        app.post('/shop_transections_closing_month', async (req, res) => {
-            try {
-                const bodyData = req.body;
-
-                const existing = await shopTransectionsCollection.findOne({});
-
-                if (existing) {
-                    await shopTransectionsSummaryCollection.insertOne(bodyData);
-
-                    await shopTransectionsCollection.updateOne(
-                        { _id: existing._id },
-                        {
-                            $set: {
-                                month_name: '',
-                                total_revenue_amount: 0,
-                                total_expense_amount: 0,
-                                hand_on_cash: bodyData.hand_on_cash,
-                                revenue_transections: [],
-                                expense_transections: []
-                            }
-                        }
-                    );
-                }
-                else {
-                    await shopTransectionsCollection.insertOne(bodyData);
-                }
-
-                res.json({
-                    message: 'Shop transections saved successfully'
-                });
-
-            } catch (err) {
-                console.error(err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
-            }
-        });
-
-
-        app.post('/self_transections_closing_month', async (req, res) => {
-            try {
-                const bodyData = req.body;
-
-                const existing = await selfTransectionsCollection.findOne({});
-
-                if (existing) {
-                    await selfTransectionsSummaryCollection.insertOne(bodyData);
-
-                    await selfTransectionsCollection.updateOne(
-                        { _id: existing._id },
-                        {
-                            $set: {
-                                month_name: '',
-                                total_revenue_amount: 0,
-                                total_expense_amount: 0,
-                                hand_on_cash: bodyData.hand_on_cash,
-                                revenue_transections: [],
-                                expense_transections: []
-                            }
-                        }
-                    );
-                }
-                else {
-                    await selfTransectionsCollection.insertOne(bodyData);
-                }
-
-                res.json({
-                    message: 'Shop transections saved successfully'
-                });
-
-            } catch (err) {
-                console.error(err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
-            }
-        });
-
-
-        app.put('/start_new_month', async (req, res) => {
-            try {
-                const bodyData = req.body;
-
-                const existing = await shopTransectionsCollection.findOne({});
-
-                const result = await shopTransectionsCollection.updateOne(
-                    { _id: existing._id },
-                    {
-                        $set: {
-                            month_name: bodyData.month_name
-                        }
-                    }
-                );
-
-                res.send(result);
-
-            } catch (err) {
-                console.error(err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
-            }
-        });
-
-
-        app.put('/self_start_new_month', async (req, res) => {
-            try {
-                const bodyData = req.body;
-
-                const existing = await selfTransectionsCollection.findOne({});
-
-                const result = await selfTransectionsCollection.updateOne(
-                    { _id: existing._id },
-                    {
-                        $set: {
-                            month_name: bodyData.month_name
-                        }
-                    }
-                );
-
-                res.send(result);
-
-            } catch (err) {
-                console.error(err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
-            }
-        });
-
-
         // ======================================================================================================================
 
         app.put('/set_user_category/:uid', async (req, res) => {
@@ -1099,215 +798,6 @@ async function run() {
                 res.status(500).send({
                     error: 'Update failed',
                     details: err
-                });
-            }
-        });
-
-        app.get('/shop_transections', async (req, res) => {
-            try {
-                const result = await shopTransectionsCollection.find().toArray();
-                res.send(result);
-
-            } catch (err) {
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
-                });
-            }
-        });
-
-        app.put('/shop_transections', async (req, res) => {
-
-            try {
-
-                const filter = {
-                    _id: new ObjectId(
-                        process.env.Shop_Transections_ObjectId
-                    )
-                };
-
-                const bodyData = req.body;
-
-                const transection = {
-                    transection_id:
-                        bodyData.transection_id || `${Date.now()}`,
-
-                    transection_date: bodyData.transection_date,
-
-                    transection_amount:
-                        Number(bodyData.transection_amount),
-
-                    transection_category:
-                        bodyData.transection_category || '',
-
-                    transection_explaination:
-                        bodyData.transection_explaination || ''
-                };
-
-                if (bodyData.transection_type === 'revenue') {
-
-                    const updateDoc = {
-                        $push: {
-                            revenue_transections: transection
-                        },
-
-                        $set: {
-                            total_revenue_amount:
-                                Number(bodyData.total_revenue_amount),
-
-                            hand_on_cash:
-                                Number(bodyData.hand_on_cash)
-                        }
-                    };
-
-                    const result =
-                        await shopTransectionsCollection.updateOne(
-                            filter,
-                            updateDoc
-                        );
-
-                    return res.send(result);
-                }
-
-                if (bodyData.transection_type === 'expense') {
-
-                    const updateDoc = {
-                        $push: {
-                            expense_transections: transection
-                        },
-
-                        $set: {
-                            total_expense_amount:
-                                Number(bodyData.total_expense_amount),
-
-                            hand_on_cash:
-                                Number(bodyData.hand_on_cash)
-                        }
-                    };
-
-                    const result =
-                        await shopTransectionsCollection.updateOne(
-                            filter,
-                            updateDoc
-                        );
-
-                    return res.send(result);
-                }
-
-                return res.status(400).send({
-                    acknowledged: false,
-                    message: 'Invalid transaction type'
-                });
-
-            } catch (error) {
-
-                console.error('Shop transaction error:', error);
-
-                return res.status(500).send({
-                    acknowledged: false,
-                    message: 'Internal server error',
-                    error: error.message
-                });
-            }
-        });
-
-        app.put('/self_transections', async (req, res) => {
-
-            try {
-
-                const filter =
-                    await selfTransectionsCollection.findOne({});
-
-                const bodyData = req.body;
-
-                const transection = {
-                    transection_id: bodyData.transection_id,
-                    transection_date: bodyData.transection_date,
-                    transection_amount: bodyData.transection_amount,
-                    transection_explaination:
-                        bodyData.transection_explaination
-                };
-
-                if (bodyData.transection_type === 'revenue') {
-
-                    const updateDoc = {
-                        $push: {
-                            revenue_transections: transection
-                        },
-
-                        $set: {
-                            total_revenue_amount:
-                                bodyData.total_revenue_amount,
-
-                            hand_on_cash:
-                                bodyData.hand_on_cash
-                        }
-                    };
-
-                    const result =
-                        await selfTransectionsCollection.updateOne(
-                            filter,
-                            updateDoc
-                        );
-
-                    res.send(result);
-
-                } else {
-
-                    const updateDoc = {
-                        $push: {
-                            expense_transections: transection
-                        },
-
-                        $set: {
-                            total_expense_amount:
-                                bodyData.total_expense_amount,
-
-                            hand_on_cash:
-                                bodyData.hand_on_cash
-                        }
-                    };
-
-                    const result =
-                        await selfTransectionsCollection.updateOne(
-                            filter,
-                            updateDoc
-                        );
-
-                    res.send(result);
-                }
-
-            } catch (err) {
-
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
-                });
-            }
-        });
-
-        app.get('/shop_transections_summary', async (req, res) => {
-
-            try {
-
-                const result =
-                    await shopTransectionsSummaryCollection
-                        .find()
-                        .toArray();
-
-                res.send(result);
-
-            } catch (err) {
-
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
                 });
             }
         });
@@ -1577,49 +1067,13 @@ async function run() {
             }
         });
 
-        app.get('/self_transections', async (req, res) => {
 
-            try {
+        // ============================================      ============================================
+        // ==============================================   ==============================================
+        // ===============================================================================================
 
-                const result =
-                    await selfTransectionsCollection
-                        .find()
-                        .toArray();
 
-                res.send(result);
 
-            } catch (err) {
-
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
-                });
-            }
-        });
-
-        app.get('/self_transections_summary', async (req, res) => {
-
-            try {
-
-                const result =
-                    await selfTransectionsSummaryCollection
-                        .find()
-                        .toArray();
-
-                res.send(result);
-
-            } catch (err) {
-
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
-                });
-            }
-        });
 
         app.get('/client_corner', async (req, res) => {
 
@@ -1719,475 +1173,1227 @@ async function run() {
             }
         });
 
-        app.get('/air_ticket_client_corner', async (req, res) => {
+        // =============================================================================================================================== Voucher Related
 
-            try {
 
-                const result =
-                    await airTicketClientCornerCollection
-                        .find()
-                        .toArray();
+        // ================================== Update Voucher System =========================================
 
-                res.send(result);
 
-            } catch (err) {
+        const DAILY_CATEGORIES = ['Computer', 'Stationary', 'Photocopy', 'Others'];
 
-                console.error('API route error:', err);
+        const money = (value) => {
+            const number = Number(value);
+            return Number.isFinite(number) ? Number(number.toFixed(2)) : 0;
+        };
 
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
-                });
-            }
+        const clone = (value) => JSON.parse(JSON.stringify(value));
+
+        const getDateOnly = (value) => {
+            if (!value) return '';
+            const text = String(value).trim();
+            const match = text.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/);
+            return match ? `${match[1]} ${match[2]}, ${match[3]}` : text.split(',')[0].trim();
+        };
+
+        const getTodayDateOnly = () => new Date().toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
         });
 
-        app.get('/air_ticket_client_details/:id', async (req, res) => {
+        const emptyDaily = (date) => ({
+            date,
+            computer_revenues: 0,
+            stationary_revenues: 0,
+            photocopy_revenues: 0,
+            air_ticket_revenues: 0,
+            due_list: [],
+            discount: [],
+            others_revenues: [],
+            expenses: [],
+            summary: [],
+        });
 
-            try {
-
-                const id = req.params.id;
-
-                const filter = {
-                    _id: new ObjectId(id)
+        const normalizeProducts = (products = []) => {
+            if (!Array.isArray(products)) return [];
+            return products.map((product) => {
+                const quantity = money(product?.quantity);
+                const rate = money(product?.rate);
+                return {
+                    ...product,
+                    product_name: String(product?.product_name || '').trim(),
+                    quantity,
+                    rate,
+                    total: money(quantity * rate),
+                    category: String(product?.category || '').trim(),
                 };
+            });
+        };
 
-                const result =
-                    await airTicketClientCornerCollection
-                        .findOne(filter);
-
-                res.send(result);
-
-            } catch (err) {
-
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
-                });
+        const categoryTotals = (products = []) => {
+            const totals = { Computer: 0, Stationary: 0, Photocopy: 0, Others: 0 };
+            for (const product of products) {
+                if (DAILY_CATEGORIES.includes(product.category)) {
+                    totals[product.category] = money(totals[product.category] + money(product.total));
+                }
             }
-        });
+            return totals;
+        };
 
-        app.delete('/air_ticket_client/:id', async (req, res) => {
+        const sumDueForDate = (dueList = [], targetDate) => {
+            return (Array.isArray(dueList) ? dueList : []).reduce((sum, group) => {
+                if (getDateOnly(group?.date) !== getDateOnly(targetDate)) return sum;
+                return sum + (Array.isArray(group?.due_data)
+                    ? group.due_data.reduce((s, item) => s + money(item?.amount), 0)
+                    : 0);
+            }, 0);
+        };
 
-            try {
+        const ensureSummaryDate = (summary, date, daily) => {
+            const target = getDateOnly(date);
+            let index = summary.findIndex((item) => getDateOnly(item?.date) === target);
 
-                const id = req.params.id;
-
-                const filter = {
-                    _id: new ObjectId(id)
-                };
-
-                const result =
-                    await airTicketClientCornerCollection
-                        .deleteOne(filter);
-
-                res.send(result);
-
-            } catch (err) {
-
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Internal server error',
-                    details: err.message
+            if (index === -1) {
+                summary.push({
+                    date: target,
+                    computer_revenues: money(daily.computer_revenues),
+                    stationary_revenues: money(daily.stationary_revenues),
+                    photocopy_revenues: money(daily.photocopy_revenues),
+                    air_ticket_revenues: money(daily.air_ticket_revenues),
+                    others_revenues: Array.isArray(daily.others_revenues) ? clone(daily.others_revenues) : [],
+                    due: sumDueForDate(daily.due_list, target),
+                    discount: Array.isArray(daily.discount)
+                        ? clone(daily.discount).filter((item) => getDateOnly(item?.date) === target)
+                        : [],
+                    expenses: Array.isArray(daily.expenses) ? clone(daily.expenses) : [],
                 });
+                index = summary.length - 1;
             }
-        });
 
-        // ===============================================================================================================================
-        app.post('/air_ticket_new_client', async (req, res) => {
-            try {
-                const clientData = req.body;
+            return index;
+        };
 
-                const result =
-                    await airTicketClientCornerCollection.insertOne(
-                        clientData
-                    );
+        const refreshSummaryDate = (summary, date, daily) => {
+            const target = getDateOnly(date);
+            const index = ensureSummaryDate(summary, target, daily);
+            const current = summary[index] || {};
 
-                res.send(result);
+            summary[index] = {
+                ...current,
+                date: target,
+                computer_revenues: money(daily.computer_revenues),
+                stationary_revenues: money(daily.stationary_revenues),
+                photocopy_revenues: money(daily.photocopy_revenues),
+                air_ticket_revenues: money(daily.air_ticket_revenues),
+                others_revenues: Array.isArray(daily.others_revenues) ? clone(daily.others_revenues) : [],
+                due: sumDueForDate(daily.due_list, target),
+                discount: Array.isArray(daily.discount)
+                    ? clone(daily.discount).filter((item) => getDateOnly(item?.date) === target)
+                    : [],
+                expenses: Array.isArray(daily.expenses) ? clone(daily.expenses) : [],
+            };
+        };
 
-            } catch (err) {
-                console.error('API route error:', err);
+        /* =========================================================
+           ENSURE CURRENT BUSINESS DAY
+        ========================================================= */
 
-                res.status(500).send({
-                    error: 'Insert failed',
-                    details: err.message
-                });
+        const ensureToday = async () => {
+            const today = getTodayDateOnly();
+            let daily = await dailyTransactionsCollection.findOne({});
+
+            if (!daily) {
+                const fresh = emptyDaily(today);
+                const result = await dailyTransactionsCollection.insertOne(fresh);
+                return { ...fresh, _id: result.insertedId };
             }
-        });
 
+            if (getDateOnly(daily.date) === today) return daily;
+
+            const oldDate = getDateOnly(daily.date);
+            const summary = Array.isArray(daily.summary) ? clone(daily.summary) : [];
+
+            const oldSnapshot = {
+                date: oldDate,
+                computer_revenues: money(daily.computer_revenues),
+                stationary_revenues: money(daily.stationary_revenues),
+                photocopy_revenues: money(daily.photocopy_revenues),
+                air_ticket_revenues: money(daily.air_ticket_revenues),
+                others_revenues: Array.isArray(daily.others_revenues) ? clone(daily.others_revenues) : [],
+                due: sumDueForDate(daily.due_list, oldDate),
+                discount: Array.isArray(daily.discount)
+                    ? clone(daily.discount).filter((item) => getDateOnly(item?.date) === oldDate)
+                    : [],
+                expenses: Array.isArray(daily.expenses) ? clone(daily.expenses) : [],
+            };
+
+            const oldIndex = summary.findIndex((item) => getDateOnly(item?.date) === oldDate);
+            if (oldIndex >= 0) summary[oldIndex] = oldSnapshot;
+            else summary.push(oldSnapshot);
+
+            await dailyTransactionsCollection.updateOne(
+                { _id: daily._id },
+                {
+                    $set: {
+                        date: today,
+                        computer_revenues: 0,
+                        stationary_revenues: 0,
+                        photocopy_revenues: 0,
+                        air_ticket_revenues: 0,
+                        others_revenues: [],
+                        expenses: [],
+                        discount: [],
+                        summary,
+                    },
+                }
+            );
+
+            return dailyTransactionsCollection.findOne({ _id: daily._id });
+        };
+
+
+        /* =========================================================
+   VOUCHER SERIAL
+========================================================= */
 
         app.get('/voucher_sl', async (req, res) => {
             try {
-                const result =
-                    await voucherSlCollection.findOne({});
-
-                res.send(result);
-
-            } catch (err) {
-                console.error('API route error:', err);
-
-                res.status(500).send({
-                    error: 'Fetch failed',
-                    details: err.message
-                });
+                res.send(await voucherSlCollection.findOne({}) || { sl_no: 0 });
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to load voucher serial', details: error.message });
             }
         });
-
 
         app.post('/voucher_sl', async (req, res) => {
-            const options = { upsert: true };
-            const updatedSl = req.body;
-
             try {
-                const existing =
-                    await voucherSlCollection.findOne({});
-
-                if (existing) {
-                    await voucherSlCollection.updateOne(
-                        { _id: existing._id },
-                        {
-                            $set: {
-                                sl_no: updatedSl.new_sl_no
-                            }
-                        },
-                        options
-                    );
-                } else {
-                    await voucherSlCollection.insertOne({
-                        sl_no: updatedSl.new_sl_no
-                    });
-                }
-
-                res.send({
-                    message: 'new sl set successfully'
-                });
-
-            } catch (err) {
-                console.error('API route error:', err);
-
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
+                const slNo = money(req.body?.new_sl_no);
+                const existing = await voucherSlCollection.findOne({});
+                const result = existing
+                    ? await voucherSlCollection.updateOne({ _id: existing._id }, { $set: { sl_no: slNo } })
+                    : await voucherSlCollection.insertOne({ sl_no: slNo });
+                res.send({ success: true, acknowledged: result.acknowledged, sl_no: slNo });
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to update voucher serial', details: error.message });
             }
         });
 
+
+        /* =========================================================
+           DAILY READ
+        ========================================================= */
+
+        app.get('/daily_transactions/ensure_today', async (req, res) => {
+            try {
+                res.send(await ensureToday());
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to load daily transactions', details: error.message });
+            }
+        });
+
+        app.get('/daily_transactions', async (req, res) => {
+            try {
+                res.send(await ensureToday());
+            } catch (error) {
+                res.status(500).send({ error: 'Failed to load daily transactions', details: error.message });
+            }
+        });
+
+        /* =========================================================
+           MANUAL REVENUE
+        ========================================================= */
+
+        app.patch('/daily_transactions/revenue', async (req, res) => {
+            try {
+                const category = String(req.body?.category || '').toLowerCase();
+                const amount = money(req.body?.amount);
+                const discount = money(req.body?.discount);
+                const paid = money(req.body?.paid_amount);
+                const reference = String(req.body?.reference || '').trim();
+                const comment = String(req.body?.comment || '').trim();
+
+                if (!['computer', 'stationary', 'photocopy', 'others'].includes(category))
+                    return res.status(400).send({ error: 'Invalid revenue category.' });
+                if (amount <= 0) return res.status(400).send({ error: 'Invalid revenue amount.' });
+                if (discount < 0 || discount > amount) return res.status(400).send({ error: 'Invalid discount.' });
+                const due = money(Math.max(0, amount - discount - paid));
+                if (paid < 0 || paid > money(amount - discount)) return res.status(400).send({ error: 'Invalid paid amount.' });
+                if (due > 0 && !reference) return res.status(400).send({ error: 'Reference is required for a due entry.' });
+
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                const dailyUpdate = clone(daily);
+                const referenceText = reference || `Manual ${category}`;
+
+                if (category === 'computer') dailyUpdate.computer_revenues = money(dailyUpdate.computer_revenues + amount);
+                if (category === 'stationary') dailyUpdate.stationary_revenues = money(dailyUpdate.stationary_revenues + amount);
+                if (category === 'photocopy') dailyUpdate.photocopy_revenues = money(dailyUpdate.photocopy_revenues + amount);
+                if (category === 'others') {
+                    if (!Array.isArray(dailyUpdate.others_revenues)) dailyUpdate.others_revenues = [];
+                    dailyUpdate.others_revenues.push({ amount, comment, reference: referenceText });
+                }
+                if (discount > 0) dailyUpdate.discount.push({ date: today, reference: referenceText, amount: discount });
+                if (due > 0) {
+                    let group = dailyUpdate.due_list.find((item) => getDateOnly(item?.date) === today);
+                    if (!group) { group = { date: today, due_data: [] }; dailyUpdate.due_list.push(group); }
+                    group.due_data.push({ reference: referenceText, amount: due });
+                }
+
+                refreshSummaryDate(dailyUpdate.summary, today, dailyUpdate);
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    {
+                        $set: {
+                            computer_revenues: dailyUpdate.computer_revenues,
+                            stationary_revenues: dailyUpdate.stationary_revenues,
+                            photocopy_revenues: dailyUpdate.photocopy_revenues,
+                            others_revenues: dailyUpdate.others_revenues,
+                            due_list: dailyUpdate.due_list,
+                            discount: dailyUpdate.discount,
+                            summary: dailyUpdate.summary,
+                        }
+                    }
+                );
+
+                res.send({ success: true, acknowledged: result.acknowledged, result });
+            } catch (error) {
+                res.status(500).send({ error: 'Revenue transaction failed', details: error.message });
+            }
+        });
+
+        /* =========================================================
+           EXPENSE
+        ========================================================= */
+
+        app.patch('/daily_transactions/expense', async (req, res) => {
+            try {
+                const amount = money(req.body?.amount);
+                const comment = String(req.body?.comment || '').trim();
+                if (amount <= 0) return res.status(400).send({ error: 'Expense amount must be greater than 0.' });
+                if (!comment) return res.status(400).send({ error: 'Expense description is required.' });
+
+                const daily = await ensureToday();
+                const expenses = Array.isArray(daily.expenses) ? clone(daily.expenses) : [];
+                expenses.push({ amount, comment });
+
+                const summary = Array.isArray(daily.summary) ? clone(daily.summary) : [];
+                const dailyCopy = clone(daily);
+                dailyCopy.expenses = expenses;
+                refreshSummaryDate(summary, getDateOnly(daily.date), dailyCopy);
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    { $set: { expenses, summary } }
+                );
+                res.send({ success: true, acknowledged: result.acknowledged, result });
+            } catch (error) {
+                res.status(500).send({ error: 'Expense transaction failed', details: error.message });
+            }
+        });
+
+        /* =========================================================
+           CREATE VOUCHER
+        ========================================================= */
 
         app.put('/new_voucher/:id', async (req, res) => {
             try {
-                const id = req.params.id;
+                const clientId = req.params.id;
+                if (!ObjectId.isValid(clientId)) return res.status(400).send({ success: false, error: 'Invalid client id' });
 
-                const filter = {
-                    _id: new ObjectId(id)
-                };
+                const products = normalizeProducts(req.body?.products);
+                const invalid = products.find((p) => !p.product_name || p.quantity <= 0 || p.rate < 0 || !DAILY_CATEGORIES.includes(p.category));
+                if (invalid) return res.status(400).send({ success: false, error: `Invalid product/category: ${invalid.product_name || 'Unknown product'}` });
 
-                const options = {
-                    upsert: true
-                };
+                const total = money(products.reduce((sum, p) => sum + p.total, 0));
+                const discount = money(req.body?.discount);
+                const paid = money(req.body?.paid_amount);
+                if (discount < 0 || discount > total) return res.status(400).send({ success: false, error: 'Invalid voucher discount.' });
+                if (paid < 0 || paid > money(total - discount)) return res.status(400).send({ success: false, error: 'Invalid voucher paid amount.' });
+                const due = money(total - discount - paid);
 
-                const Data = req.body;
+                const clientFilter = { _id: new ObjectId(clientId) };
+                const client = await clientCornerCollection.findOne(clientFilter);
+                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
+
+                const voucherNo = String(req.body?.voucher_no || '').trim();
+                if (!voucherNo) return res.status(400).send({ success: false, error: 'Voucher number is required' });
+
+                const vouchers = Array.isArray(client.vouchers) ? clone(client.vouchers) : [];
+                if (vouchers.some((v) => String(v?.voucher_no) === voucherNo))
+                    return res.status(409).send({ success: false, error: `Voucher #${voucherNo} already exists for this client.` });
+
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                const voucherDate = getDateOnly(req.body?.date) || today;
+                if (voucherDate !== today)
+                    return res.status(409).send({ success: false, error: 'Voucher date must be today.' });
 
                 const voucher = {
-                    date: Data.date,
-                    voucher_no: String(Data.voucher_no),
-                    products: Data.products,
-                    total: Data.total,
-                    paid_amount: Data.paid_amount,
-                    due_amount: Data.due_amount,
-                    payment_status: Data.payment_status,
-                    discount: Data.discount
+                    ...req.body,
+                    date: req.body?.date || `${today}, ${new Date().toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
+                    voucher_no: voucherNo,
+                    products,
+                    total,
+                    paid_amount: paid,
+                    due_amount: due,
+                    payment_status: due > 0 ? 'Unpaid' : 'Paid',
+                    discount,
                 };
 
-                const client =
-                    await clientCornerCollection.findOne(filter);
+                if (vouchers.length >= 10) vouchers.shift();
+                vouchers.push(voucher);
 
-                // Step 1: If length > 10, remove first voucher
-                if (client?.vouchers?.length > 10) {
-                    await clientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $pop: {
-                                vouchers: -1
-                            }
-                        }
-                    );
+                const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
+                if (paid > 0) {
+                    if (transections.length >= 15) transections.shift();
+                    transections.push({
+                        date: voucher.date,
+                        reference_voucher: voucherNo,
+                        paid_amount: paid,
+                        transection_amount: paid,
+                        due_amount: due,
+                        payment_status: voucher.payment_status,
+                    });
                 }
 
-                const result =
-                    await clientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $push: {
-                                vouchers: voucher
-                            }
-                        },
-                        options
-                    );
+                const totals = categoryTotals(products);
+                const nextDaily = clone(daily);
+                nextDaily.computer_revenues = money(nextDaily.computer_revenues + totals.Computer);
+                nextDaily.stationary_revenues = money(nextDaily.stationary_revenues + totals.Stationary);
+                nextDaily.photocopy_revenues = money(nextDaily.photocopy_revenues + totals.Photocopy);
 
-                res.send(result);
+                const voucherReference = `Voucher no: ${voucherNo}`;
+                if (!Array.isArray(nextDaily.others_revenues)) nextDaily.others_revenues = [];
+                for (const product of products.filter((p) => p.category === 'Others')) {
+                    nextDaily.others_revenues.push({ amount: money(product.total), comment: product.product_name, reference: voucherReference });
+                }
 
-            } catch (err) {
-                console.error('API route error:', err);
+                if (discount > 0) nextDaily.discount.push({ date: today, reference: voucherReference, amount: discount });
+                if (due > 0) {
+                    let group = nextDaily.due_list.find((g) => getDateOnly(g?.date) === today);
+                    if (!group) { group = { date: today, due_data: [] }; nextDaily.due_list.push(group); }
+                    group.due_data.push({ reference: voucherReference, amount: due });
+                }
 
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
+                refreshSummaryDate(nextDaily.summary, today, nextDaily);
+
+                await clientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
+                const dailyResult = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    {
+                        $set: {
+                            computer_revenues: nextDaily.computer_revenues,
+                            stationary_revenues: nextDaily.stationary_revenues,
+                            photocopy_revenues: nextDaily.photocopy_revenues,
+                            others_revenues: nextDaily.others_revenues,
+                            due_list: nextDaily.due_list,
+                            discount: nextDaily.discount,
+                            summary: nextDaily.summary,
+                        }
+                    }
+                );
+
+                res.send({ success: true, acknowledged: dailyResult.acknowledged, voucher, categoryTotals: totals, dailyResult });
+            } catch (error) {
+                console.error('new_voucher error:', error);
+                res.status(500).send({ success: false, error: 'Voucher creation failed', details: error.message });
             }
         });
 
+        /* =========================================================
+           EDIT VOUCHER — SAME DAY ONLY
+        
+           Historical vouchers are intentionally locked. This guarantees
+           that a previous day's closed financial summary cannot be changed
+           accidentally. Current-day edits use category DELTAS.
+        ========================================================= */
 
-        app.put('/air_ticket_new_voucher/:id', async (req, res) => {
+        app.patch('/edit_voucher/:id', async (req, res) => {
             try {
-                const id = req.params.id;
+                const clientId = req.params.id;
+                if (!ObjectId.isValid(clientId)) return res.status(400).send({ success: false, error: 'Invalid client id' });
 
-                const filter = {
-                    _id: new ObjectId(id)
-                };
+                const clientFilter = { _id: new ObjectId(clientId) };
+                const client = await clientCornerCollection.findOne(clientFilter);
+                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
 
-                const options = {
-                    upsert: true
-                };
+                const voucherNo = String(req.body?.voucher_no || '').trim();
+                const vouchers = Array.isArray(client.vouchers) ? clone(client.vouchers) : [];
+                const voucherIndex = vouchers.findIndex((v) => String(v?.voucher_no) === voucherNo);
+                if (voucherIndex < 0) return res.status(404).send({ success: false, error: 'Voucher not found' });
 
-                const Data = req.body;
+                const oldVoucher = vouchers[voucherIndex];
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                const voucherDate = getDateOnly(oldVoucher.date);
 
-                const voucher = {
-                    date: Data.date,
-                    voucher_no: String(Data.voucher_no),
-                    destination: Data.destination,
-                    flight_date: Data.flight_date,
-                    ticket_price: Data.ticket_price,
-                    paid_amount: Data.paid_amount,
-                    due_amount: Data.due_amount,
-                    payment_status: Data.payment_status,
-                    discount: Data.discount
-                };
-
-                const client =
-                    await airTicketClientCornerCollection.findOne(
-                        filter
-                    );
-
-                // Step 1: If length > 10, remove first voucher
-                if (client?.vouchers?.length > 10) {
-                    await airTicketClientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $pop: {
-                                vouchers: -1
-                            }
-                        }
-                    );
+                if (voucherDate !== today) {
+                    return res.status(409).send({
+                        success: false,
+                        code: 'VOUCHER_EDIT_LOCKED',
+                        error: 'This voucher belongs to a previous date and can no longer be edited.',
+                    });
                 }
 
-                const result =
-                    await airTicketClientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $push: {
-                                vouchers: voucher
-                            }
-                        },
-                        options
-                    );
+                const newProducts = normalizeProducts(req.body?.products);
+                const invalid = newProducts.find((p) => !p.product_name || p.quantity <= 0 || p.rate < 0 || !DAILY_CATEGORIES.includes(p.category));
+                if (invalid) return res.status(400).send({ success: false, error: `Invalid product/category: ${invalid.product_name || 'Unknown product'}` });
 
-                res.send(result);
+                const oldProducts = normalizeProducts(oldVoucher.products);
+                const oldTotals = categoryTotals(oldProducts);
+                const newTotals = categoryTotals(newProducts);
+                const total = money(newProducts.reduce((sum, p) => sum + p.total, 0));
+                const paid = money(oldVoucher.paid_amount);
+                const discount = money(oldVoucher.discount);
+                const due = money(Math.max(0, total - paid - discount));
 
-            } catch (err) {
-                console.error('API route error:', err);
+                const voucherReference = `Voucher no: ${voucherNo}`;
+                const nextDaily = clone(daily);
 
-                res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
+                nextDaily.computer_revenues = money(nextDaily.computer_revenues + newTotals.Computer - oldTotals.Computer);
+                nextDaily.stationary_revenues = money(nextDaily.stationary_revenues + newTotals.Stationary - oldTotals.Stationary);
+                nextDaily.photocopy_revenues = money(nextDaily.photocopy_revenues + newTotals.Photocopy - oldTotals.Photocopy);
+
+                nextDaily.others_revenues = (Array.isArray(nextDaily.others_revenues) ? nextDaily.others_revenues : [])
+                    .filter((item) => item?.reference !== voucherReference);
+                for (const product of newProducts.filter((p) => p.category === 'Others')) {
+                    nextDaily.others_revenues.push({ amount: money(product.total), comment: product.product_name, reference: voucherReference });
+                }
+
+                // Replace this voucher's due entry only. Other vouchers are untouched.
+                nextDaily.due_list = (Array.isArray(nextDaily.due_list) ? nextDaily.due_list : []).map((group) => ({
+                    ...group,
+                    due_data: Array.isArray(group?.due_data)
+                        ? group.due_data.filter((item) => item?.reference !== voucherReference)
+                        : [],
+                })).filter((group) => Array.isArray(group.due_data) && group.due_data.length);
+
+                if (due > 0) {
+                    let group = nextDaily.due_list.find((g) => getDateOnly(g?.date) === today);
+                    if (!group) { group = { date: today, due_data: [] }; nextDaily.due_list.push(group); }
+                    group.due_data.push({ reference: voucherReference, amount: due });
+                }
+
+                const updatedVoucher = {
+                    ...oldVoucher,
+                    products: newProducts,
+                    total,
+                    due_amount: due,
+                    payment_status: due > 0 ? 'Unpaid' : 'Paid',
+                };
+
+                vouchers[voucherIndex] = updatedVoucher;
+                refreshSummaryDate(nextDaily.summary, today, nextDaily);
+
+                const voucherResult = await clientCornerCollection.updateOne(
+                    clientFilter,
+                    { $set: { vouchers } }
+                );
+
+                const dailyResult = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    {
+                        $set: {
+                            computer_revenues: nextDaily.computer_revenues,
+                            stationary_revenues: nextDaily.stationary_revenues,
+                            photocopy_revenues: nextDaily.photocopy_revenues,
+                            others_revenues: nextDaily.others_revenues,
+                            due_list: nextDaily.due_list,
+                            summary: nextDaily.summary,
+                        }
+                    }
+                );
+
+                res.send({
+                    success: voucherResult.acknowledged && dailyResult.acknowledged,
+                    voucher: updatedVoucher,
+                    dailyResult,
+                    changes: {
+                        computerDelta: money(newTotals.Computer - oldTotals.Computer),
+                        stationaryDelta: money(newTotals.Stationary - oldTotals.Stationary),
+                        photocopyDelta: money(newTotals.Photocopy - oldTotals.Photocopy),
+                        oldCategoryTotals: oldTotals,
+                        newCategoryTotals: newTotals,
+                    },
                 });
+            } catch (error) {
+                console.error('edit_voucher error:', error);
+                res.status(500).send({ success: false, error: 'Voucher edit failed', details: error.message });
             }
         });
 
+        /* =========================================================
+           TAKE PAYMENT / ADDITIONAL DISCOUNT
+        
+           Payment NEVER increases revenue again.
+           It only reduces the matching due and records payment/discount.
+        ========================================================= */
 
         app.put('/take_payment/:id', async (req, res) => {
             try {
-                const id = req.params.id;
-                const Data = req.body;
+                const clientId = req.params.id;
+                if (!ObjectId.isValid(clientId)) return res.status(400).send({ success: false, error: 'Invalid client id' });
 
-                const filter = {
-                    _id: new ObjectId(id),
-                    'vouchers.voucher_no': Data.voucher_no
-                };
+                const voucherNo = String(req.body?.voucher_no || '').trim();
+                const clientFilter = { _id: new ObjectId(clientId) };
+                const client = await clientCornerCollection.findOne(clientFilter);
+                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
 
-                const clientFilter = {
-                    _id: new ObjectId(id)
-                };
+                const vouchers = Array.isArray(client.vouchers) ? clone(client.vouchers) : [];
+                const voucherIndex = vouchers.findIndex((v) => String(v?.voucher_no) === voucherNo);
+                if (voucherIndex < 0) return res.status(404).send({ success: false, error: 'Voucher not found' });
 
-                const transection = {
-                    date: Data.date,
-                    reference_voucher:
-                        String(Data.reference_voucher),
-                    paid_amount: Data.paid_amount,
-                    transection_amount:
-                        Data.transection_amount,
-                    due_amount: Data.due,
-                    payment_status:
-                        Data.payment_status
-                };
+                const voucher = vouchers[voucherIndex];
+                const currentDue = money(voucher.due_amount);
+                const payment = money(req.body?.transection_amount);
+                const extraDiscount = money(req.body?.additional_discount);
+                const reduction = money(payment + extraDiscount);
 
-                const client =
-                    await clientCornerCollection.findOne(
-                        clientFilter
+                if (payment <= 0 && extraDiscount <= 0) return res.status(400).send({ success: false, error: 'Payment or additional discount is required.' });
+                if (reduction > currentDue) return res.status(400).send({ success: false, error: 'Payment + discount cannot exceed current due.' });
+
+                const daily = await ensureToday();
+                const nextDaily = clone(daily);
+                const dueReference = `Voucher no: ${voucherNo}`;
+                let found = false;
+                let dueDate = '';
+
+                for (const group of nextDaily.due_list) {
+                    if (!Array.isArray(group?.due_data)) continue;
+                    const index = group.due_data.findIndex((item) => item?.reference === dueReference);
+                    if (index < 0) continue;
+                    found = true;
+                    dueDate = getDateOnly(group.date);
+                    const current = money(group.due_data[index].amount);
+                    if (reduction > current) return res.status(400).send({ success: false, error: 'Daily due amount is smaller than requested reduction.' });
+                    const remaining = money(current - reduction);
+                    if (remaining <= 0) group.due_data.splice(index, 1);
+                    else group.due_data[index].amount = remaining;
+                    break;
+                }
+
+                if (!found) return res.status(404).send({ success: false, error: `Due entry not found for ${dueReference}.` });
+
+                nextDaily.due_list = nextDaily.due_list.filter((g) => Array.isArray(g?.due_data) && g.due_data.length);
+
+                if (extraDiscount > 0) {
+                    nextDaily.discount.push({
+                        date: getDateOnly(req.body?.date) || getTodayDateOnly(),
+                        reference: dueReference,
+                        amount: extraDiscount,
+                    });
+                }
+
+                voucher.paid_amount = money(voucher.paid_amount + payment);
+                voucher.discount = money(voucher.discount + extraDiscount);
+                voucher.due_amount = money(currentDue - reduction);
+                voucher.payment_status = voucher.due_amount > 0 ? 'Unpaid' : 'Paid';
+                vouchers[voucherIndex] = voucher;
+
+                const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
+                if (payment > 0) {
+                    if (transections.length >= 15) transections.shift();
+                    transections.push({
+                        date: req.body?.date || getTodayDateOnly(),
+                        reference_voucher: voucherNo,
+                        paid_amount: payment,
+                        transection_amount: payment,
+                        due_amount: voucher.due_amount,
+                        payment_status: voucher.payment_status,
+                    });
+                }
+
+                // Update ONLY the due field of the voucher's original summary date.
+                // Never overwrite historical category revenue with today's active totals.
+                const summaryDateIndex = nextDaily.summary.findIndex(
+                    (item) => getDateOnly(item?.date) === dueDate
+                );
+                if (summaryDateIndex >= 0) {
+                    nextDaily.summary[summaryDateIndex].due = sumDueForDate(
+                        nextDaily.due_list,
+                        dueDate
                     );
+                }
 
-                console.log(
-                    client?.transections?.length
+                // If the payment/extra discount happened today and today's summary
+                // already exists, refresh today's summary so its discount/due values stay current.
+                if (dueDate === getTodayDateOnly()) {
+                    refreshSummaryDate(nextDaily.summary, dueDate, nextDaily);
+                }
+
+                const voucherResult = await clientCornerCollection.updateOne(
+                    clientFilter,
+                    { $set: { vouchers, transections } }
                 );
 
-                // Step 1: If length > 15, remove first transection
-                if (client?.transections?.length > 15) {
-                    await clientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $pop: {
-                                transections: -1
-                            }
+                const dailyResult = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    {
+                        $set: {
+                            due_list: nextDaily.due_list,
+                            discount: nextDaily.discount,
+                            summary: nextDaily.summary,
                         }
-                    );
-                }
+                    }
+                );
 
-                const result =
-                    await clientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $set: {
-                                'vouchers.$.paid_amount':
-                                    Data.paid_amount,
-
-                                'vouchers.$.due_amount':
-                                    Data.due,
-
-                                'vouchers.$.payment_status':
-                                    Data.payment_status,
-
-                                'vouchers.$.discount':
-                                    Data.discount
-                            },
-
-                            $push: {
-                                transections: transection
-                            }
-                        }
-                    );
-
-                if (result.modifiedCount > 0) {
-                    return res.send({
-                        success: true,
-                        message: 'updated'
-                    });
-                }
-
-                return res.status(404).send({
-                    success: false,
-                    message: 'Voucher not found'
-                });
-
-            } catch (err) {
-                console.error('API route error:', err);
-
-                return res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
-                });
+                res.send({ success: voucherResult.acknowledged && dailyResult.acknowledged, voucher, dailyResult });
+            } catch (error) {
+                console.error('take_payment error:', error);
+                res.status(500).send({ success: false, error: 'Payment update failed', details: error.message });
             }
         });
 
+        /* =========================================================
+           PAY A GENERIC DUE
+        ========================================================= */
 
-        app.put('/air_ticket_take_payment/:id', async (req, res) => {
+        app.patch('/daily_transactions/pay_due', async (req, res) => {
+            try {
+                const date = getDateOnly(req.body?.date);
+                const reference = String(req.body?.reference || '').trim();
+                const amount = money(req.body?.paid_amount ?? req.body?.amount);
+                if (!date || !reference || amount <= 0) return res.status(400).send({ error: 'Date, reference and valid payment amount are required.' });
+
+                const daily = await ensureToday();
+                const nextDaily = clone(daily);
+                const group = nextDaily.due_list.find((g) => getDateOnly(g?.date) === date);
+                if (!group) return res.status(404).send({ error: 'Due date not found.' });
+                const index = group.due_data.findIndex((item) => String(item?.reference || '').trim() === reference);
+                if (index < 0) return res.status(404).send({ error: 'Due entry not found.' });
+
+                const current = money(group.due_data[index].amount);
+                if (amount > current) return res.status(400).send({ error: `Payment cannot exceed current due of ${current}.` });
+                const remaining = money(current - amount);
+                if (remaining <= 0) group.due_data.splice(index, 1);
+                else group.due_data[index].amount = remaining;
+                nextDaily.due_list = nextDaily.due_list.filter((g) => Array.isArray(g?.due_data) && g.due_data.length);
+                refreshSummaryDate(nextDaily.summary, date, nextDaily);
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    { $set: { due_list: nextDaily.due_list, summary: nextDaily.summary } }
+                );
+                res.send({ success: true, acknowledged: result.acknowledged, remaining_due: remaining, result });
+            } catch (error) {
+                res.status(500).send({ error: 'Due payment failed', details: error.message });
+            }
+        });
+
+        /* =========================================================
+           DELETE SUMMARY DATE RANGE
+        ========================================================= */
+
+        /* =========================================================
+           STAFF TRANSACTION -> DAILY EXPENSE
+
+           Every "Make a Transaction" from StaffDetails is treated as
+           today's expense. Existing staff accounting remains unchanged.
+        ========================================================= */
+
+        app.put('/transection_details/:id', async (req, res) => {
             try {
                 const id = req.params.id;
-                const Data = req.body;
+                if (!ObjectId.isValid(id)) return res.status(400).send({ acknowledged: false, error: 'Invalid staff id' });
 
-                const filter = {
-                    _id: new ObjectId(id),
-                    'vouchers.voucher_no': Data.voucher_no
+                const body = req.body || {};
+                const amount = money(body.transection_amount);
+                const type = String(body.transection_type || '').trim();
+                const currentDate = getDateOnly(body.currentDate) || getTodayDateOnly();
+                if (amount <= 0) return res.status(400).send({ acknowledged: false, error: 'Transaction amount must be greater than 0.' });
+                if (!type) return res.status(400).send({ acknowledged: false, error: 'Transaction type is required.' });
+
+                const staffFilter = { _id: new ObjectId(id) };
+                const staff = await staffsCollection.findOne(staffFilter);
+                if (!staff) return res.status(404).send({ acknowledged: false, error: 'Staff not found.' });
+
+                // Preserve the existing staff balance/transaction behavior.
+                const previousWithdrawal = money(body.previous_withdrawal_amount ?? staff.withdrawal_amount);
+                const previousAvailable = money(body.previous_available_balance ?? staff.available_balance);
+                const newWithdrawal = type === 'Payback Lend'
+                    ? money(previousWithdrawal - amount)
+                    : money(body.withdrawal_amount ?? previousWithdrawal + amount);
+                const newAvailable = type === 'Payback Lend'
+                    ? money(previousAvailable + amount)
+                    : money(body.available_balance ?? previousAvailable - amount);
+
+                const staffTransaction = {
+                    transection_id: String(body.transection_id || `${Date.now()}-${id}`),
+                    transection_date: currentDate,
+                    transection_amount: amount,
+                    transection_type: type,
+                    comment: String(body.comment || '').trim(),
                 };
 
-                const clientFilter = {
-                    _id: new ObjectId(id)
-                };
+                const staffTransactions = Array.isArray(staff.transections) ? clone(staff.transections) : [];
+                if (staffTransactions.length >= 20) staffTransactions.shift();
+                staffTransactions.push(staffTransaction);
 
-                const transection = {
-                    date: Data.date,
-                    reference_voucher:
-                        String(Data.reference_voucher),
-                    paid_amount: Data.paid_amount,
-                    transection_amount:
-                        Data.transection_amount,
-                    due_amount: Data.due,
-                    payment_status:
-                        Data.payment_status
-                };
+                const staffResult = await staffsCollection.updateOne(
+                    staffFilter,
+                    { $set: { withdrawal_amount: newWithdrawal, available_balance: newAvailable, transections: staffTransactions } }
+                );
+                if (!staffResult.acknowledged) throw new Error('Staff transaction update failed');
 
-                const client =
-                    await airTicketClientCornerCollection.findOne(
-                        clientFilter
-                    );
-
-                // Step 1: If length > 15, remove first transection
-                if (client?.transections?.length > 15) {
-                    await airTicketClientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $pop: {
-                                transections: -1
-                            }
-                        }
-                    );
+                // Only current-day staff transactions belong to the active daily account.
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                if (currentDate !== today) {
+                    return res.send({ acknowledged: true, staffResult, dailySynced: false });
                 }
 
-                const result =
-                    await airTicketClientCornerCollection.updateOne(
-                        filter,
-                        {
-                            $set: {
-                                'vouchers.$.paid_amount':
-                                    Data.paid_amount,
-
-                                'vouchers.$.due_amount':
-                                    Data.due,
-
-                                'vouchers.$.payment_status':
-                                    Data.payment_status,
-
-                                'vouchers.$.discount':
-                                    Data.discount
-                            },
-
-                            $push: {
-                                transections: transection
-                            }
-                        }
-                    );
-
-                if (result.modifiedCount > 0) {
-                    return res.send({
-                        success: true,
-                        message: 'updated'
-                    });
-                }
-
-                return res.status(404).send({
-                    success: false,
-                    message: 'Voucher not found'
+                const expenses = Array.isArray(daily.expenses) ? clone(daily.expenses) : [];
+                expenses.push({
+                    amount,
+                    comment: `${currentDate} ${staff.name || 'Staff'} ${type}`,
                 });
 
-            } catch (err) {
-                console.error('API route error:', err);
+                const nextDaily = clone(daily);
+                nextDaily.expenses = expenses;
+                refreshSummaryDate(nextDaily.summary, today, nextDaily);
 
-                return res.status(500).send({
-                    error: 'Update failed',
-                    details: err.message
+                const dailyResult = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    { $set: { expenses: nextDaily.expenses, summary: nextDaily.summary } }
+                );
+
+                res.send({ acknowledged: staffResult.acknowledged && dailyResult.acknowledged, staffResult, dailyResult });
+            } catch (error) {
+                console.error('transection_details error:', error);
+                res.status(500).send({ acknowledged: false, error: 'Staff transaction update failed', details: error.message });
+            }
+        });
+
+        /* =========================================================
+           CLOSING ACCOUNT
+        ========================================================= */
+
+        app.patch('/daily_transactions/close_account', async (req, res) => {
+            try {
+                const daily = await ensureToday();
+                const closingDate = getDateOnly(daily.date);
+                const closingSummary = Array.isArray(daily.closing_summary)
+                    ? clone(daily.closing_summary)
+                    : [];
+
+                const computer = money(daily.computer_revenues);
+                const stationary = money(daily.stationary_revenues);
+                const photocopy = money(daily.photocopy_revenues);
+                const airTicket = money(daily.air_ticket_revenues);
+                const others = Array.isArray(daily.others_revenues)
+                    ? money(daily.others_revenues.reduce((sum, item) => sum + money(item?.amount), 0))
+                    : 0;
+                const discount = Array.isArray(daily.discount)
+                    ? money(daily.discount.reduce((sum, item) => sum + money(item?.amount), 0))
+                    : 0;
+                const expenses = Array.isArray(daily.expenses)
+                    ? money(daily.expenses.reduce((sum, item) => sum + money(item?.amount), 0))
+                    : 0;
+                const due = money(sumDueForDate(daily.due_list, closingDate));
+
+                const previousClosing = closingSummary.length
+                    ? money(closingSummary[closingSummary.length - 1]?.available_balance)
+                    : 0;
+
+                const grossRevenue = money(
+                    computer + stationary + photocopy + airTicket + others
+                );
+
+                const availableBalance = money(
+                    previousClosing + grossRevenue - discount - expenses - due
+                );
+
+                const closingEntry = {
+                    closing_date: closingDate,
+                    computer_revenues: computer,
+                    stationary_revenues: stationary,
+                    photocopy_revenues: photocopy,
+                    air_ticket_revenues: airTicket,
+                    others_revenues: others,
+                    due,
+                    discount,
+                    expenses,
+                    previous_closing_balance: previousClosing,
+                    available_balance: availableBalance,
+                };
+
+                closingSummary.push(closingEntry);
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    {
+                        $set: {
+                            computer_revenues: 0,
+                            stationary_revenues: 0,
+                            photocopy_revenues: 0,
+                            air_ticket_revenues: 0,
+                            others_revenues: [],
+                            expenses: [],
+                            discount: [],
+                            summary: [],
+                            closing_summary: closingSummary,
+                        },
+                    }
+                );
+
+                res.send({
+                    success: result.acknowledged,
+                    closing_summary: closingEntry,
+                    dailyResult: result,
+                });
+            } catch (error) {
+                console.error('close_account error:', error);
+                res.status(500).send({
+                    success: false,
+                    error: 'Account closing failed',
+                    details: error.message,
                 });
             }
         });
+
+        app.patch('/daily_transactions/delete_summary', async (req, res) => {
+            try {
+                const { startDate, endDate } = req.body || {};
+                if (!startDate || !endDate) return res.status(400).send({ error: 'Start and end date are required.' });
+                const start = new Date(`${startDate}T00:00:00`);
+                const end = new Date(`${endDate}T23:59:59`);
+                if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start)
+                    return res.status(400).send({ error: 'Invalid date range.' });
+
+                const daily = await dailyTransactionsCollection.findOne({});
+                if (!daily) return res.status(404).send({ error: 'Daily transaction document not found.' });
+
+                const summary = (daily.summary || []).filter((item) => {
+                    const date = new Date(getDateOnly(item?.date));
+                    return !(date >= start && date <= end);
+                });
+                const result = await dailyTransactionsCollection.updateOne({ _id: daily._id }, { $set: { summary } });
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({ error: 'Delete failed', details: error.message });
+            }
+        });
+
+        // ============================================================================================================ End =================================================
+
+        /* =========================================================
+           DAILY TRANSACTION READ
+        ========================================================= */
+
+        app.get('/daily_transactions', async (req, res) => {
+            try {
+                const result = await ensureToday();
+                res.send(result);
+            } catch (error) {
+                res.status(500).send({
+                    error: 'Failed to load daily transactions',
+                    details: error.message,
+                });
+            }
+        });
+
+
+
+        const VOUCHER_EDIT_DAILY_CATEGORIES = [
+            'Computer',
+            'Stationary',
+            'Photocopy',
+            'Others',
+        ];
+
+        /* =========================================================
+           MONEY
+        ========================================================= */
+
+        const voucherEditMoney = (value) => {
+            const number = Number(value);
+
+            if (!Number.isFinite(number)) {
+                return 0;
+            }
+
+            return Number(number.toFixed(2));
+        };
+
+        /* =========================================================
+           CLONE
+        ========================================================= */
+
+        const voucherEditClone = (value) => {
+            return JSON.parse(
+                JSON.stringify(value)
+            );
+        };
+
+        /* =========================================================
+           DATE ONLY
+        ========================================================= */
+
+        const voucherEditGetDateOnly = (value) => {
+            if (!value) {
+                return '';
+            }
+
+            const text = String(value).trim();
+
+            /*
+                Example:
+        
+                August 15, 2026, 12:34 AM
+        
+                becomes:
+        
+                August 15, 2026
+            */
+
+            const fullDateMatch = text.match(
+                /^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/
+            );
+
+            if (fullDateMatch) {
+                return `${fullDateMatch[1]} ${fullDateMatch[2]}, ${fullDateMatch[3]}`;
+            }
+
+            /*
+                Handle:
+        
+                September 1
+        
+                September 1, 2026
+            */
+
+            const shortDateMatch = text.match(
+                /^([A-Za-z]+)\s+(\d{1,2})/
+            );
+
+            if (shortDateMatch) {
+                return `${shortDateMatch[1]} ${shortDateMatch[2]}`;
+            }
+
+            return text;
+        };
+
+        /* =========================================================
+           DATE NORMALIZER
+        ========================================================= */
+
+        const voucherEditNormalizeDate = (
+            value,
+            fallbackYear = new Date().getFullYear()
+        ) => {
+            const dateOnly =
+                voucherEditGetDateOnly(value);
+
+            if (!dateOnly) {
+                return '';
+            }
+
+            const fullMatch = dateOnly.match(
+                /^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/
+            );
+
+            if (fullMatch) {
+                return `${fullMatch[1]} ${fullMatch[2]}, ${fullMatch[3]}`;
+            }
+
+            const shortMatch = dateOnly.match(
+                /^([A-Za-z]+)\s+(\d{1,2})$/
+            );
+
+            if (shortMatch) {
+                return `${shortMatch[1]} ${shortMatch[2]}, ${fallbackYear}`;
+            }
+
+            return dateOnly;
+        };
+
+        /* =========================================================
+           TODAY DATE
+        ========================================================= */
+
+        const voucherEditTodayDateOnly = () => {
+            return new Date().toLocaleDateString(
+                'en-US',
+                {
+                    month: 'long',
+                    day: 'numeric',
+                    year: 'numeric',
+                }
+            );
+        };
+
+        /* =========================================================
+           SAME DATE CHECK
+        ========================================================= */
+
+        const voucherEditIsSameDate = (
+            date1,
+            date2
+        ) => {
+            const normalizedDate1 =
+                voucherEditNormalizeDate(date1);
+
+            const normalizedDate2 =
+                voucherEditNormalizeDate(date2);
+
+            return (
+                normalizedDate1 ===
+                normalizedDate2
+            );
+        };
+
+        /* =========================================================
+           NORMALIZE PRODUCTS
+        ========================================================= */
+
+        const voucherEditNormalizeProducts = (
+            products
+        ) => {
+            if (!Array.isArray(products)) {
+                return [];
+            }
+
+            return products.map((product) => {
+                const quantity = Number(
+                    product?.quantity || 0
+                );
+
+                const rate = Number(
+                    product?.rate || 0
+                );
+
+                const total =
+                    voucherEditMoney(
+                        quantity * rate
+                    );
+
+                return {
+                    ...product,
+
+                    product_name:
+                        String(
+                            product?.product_name ||
+                            ''
+                        ).trim(),
+
+                    quantity,
+
+                    rate,
+
+                    total,
+
+                    category:
+                        String(
+                            product?.category ||
+                            ''
+                        ).trim(),
+                };
+            });
+        };
+
+        /* =========================================================
+           CATEGORY TOTALS
+        ========================================================= */
+
+        const voucherEditCategoryTotals = (
+            products
+        ) => {
+            const totals = {
+                Computer: 0,
+                Stationary: 0,
+                Photocopy: 0,
+                Others: 0,
+            };
+
+            for (const product of products) {
+                const category =
+                    product?.category;
+
+                if (
+                    VOUCHER_EDIT_DAILY_CATEGORIES.includes(
+                        category
+                    )
+                ) {
+                    totals[category] +=
+                        voucherEditMoney(
+                            product?.total
+                        );
+                }
+            }
+
+            return {
+                Computer:
+                    voucherEditMoney(
+                        totals.Computer
+                    ),
+
+                Stationary:
+                    voucherEditMoney(
+                        totals.Stationary
+                    ),
+
+                Photocopy:
+                    voucherEditMoney(
+                        totals.Photocopy
+                    ),
+
+                Others:
+                    voucherEditMoney(
+                        totals.Others
+                    ),
+            };
+        };
+
+        /* =========================================================
+           DUE SUM FOR DATE
+        ========================================================= */
+
+        const voucherEditSumDueForDate = (
+            dueList,
+            targetDate
+        ) => {
+            if (!Array.isArray(dueList)) {
+                return 0;
+            }
+
+            const target =
+                voucherEditNormalizeDate(
+                    targetDate
+                );
+
+            let total = 0;
+
+            for (const group of dueList) {
+                const groupDate =
+                    voucherEditNormalizeDate(
+                        group?.date
+                    );
+
+                if (groupDate !== target) {
+                    continue;
+                }
+
+                if (
+                    !Array.isArray(
+                        group?.due_data
+                    )
+                ) {
+                    continue;
+                }
+
+                for (const item of group.due_data) {
+                    total +=
+                        voucherEditMoney(
+                            item?.amount
+                        );
+                }
+            }
+
+            return voucherEditMoney(total);
+        };
+
+
+
         app.put('/hour_rate/:id', async (req, res) => {
             try {
                 const id = req.params.id;
@@ -2497,44 +2703,7 @@ async function run() {
         });
 
 
-        app.patch('/edit_voucher/:id', async (req, res) => {
-            const { id } = req.params;
-            const {
-                voucher_no,
-                products,
-                total,
-                due_amount,
-                status
-            } = req.body;
 
-            try {
-                const filter = {
-                    _id: new ObjectId(id),
-                    'vouchers.voucher_no': voucher_no
-                };
-
-                const result = await clientCornerCollection.updateOne(
-                    filter,
-                    {
-                        $set: {
-                            'vouchers.$.products': products,
-                            'vouchers.$.due_amount': due_amount,
-                            'vouchers.$.payment_status': status,
-                            'vouchers.$.total': total
-                        }
-                    }
-                );
-
-                res.send(result);
-            } catch (err) {
-                console.error('edit_voucher error:', err);
-
-                res.status(500).send({
-                    message: '❌ Server error',
-                    error: err.message
-                });
-            }
-        });
 
 
         app.patch('/edit_client_data/:id', async (req, res) => {
@@ -2611,415 +2780,489 @@ async function run() {
         });
 
 
-        app.get('/daily_transactions', async (req, res) => {
-            try {
-                const result = await dailyTransactionsCollection.findOne({});
-                res.send(result);
-            } catch (error) {
-                console.error('daily_transactions error:', error);
 
-                res.status(500).send({
-                    error: 'Failed to fetch daily transactions',
-                    details: error.message
+
+
+        /* =========================================================
+   AIR TICKET CLIENT / VOUCHER APIs
+   NOTE:
+   - Uses the existing daily-transaction helpers already present
+     in index.js: money(), clone(), getDateOnly(), ensureToday().
+   - Air-ticket sales are recorded under Daily Transactions -> Others.
+   - Existing route names are preserved.
+   - Replace the old Air Ticket route block with this block only.
+========================================================= */
+
+        /* =========================================================
+           AIR TICKET DAILY TRANSACTION SYSTEM
+
+           Air-ticket revenue is:
+           SUM(Ticket Price - Ticket Agent Price) - Voucher Discount.
+
+           Customer due is based on:
+           SUM(Ticket Price) - Voucher Discount - Paid Amount.
+
+           Payment itself never increases revenue.
+        ========================================================= */
+
+        const AIR_TICKET_DAILY_REFERENCE = (voucherNo) =>
+            `Air Ticket Voucher no: ${String(voucherNo)}`;
+
+        const normalizeAirServices = (value) => {
+            let services = Array.isArray(value?.services) ? value.services : [];
+
+            // Backward compatibility with old single-ticket documents.
+            if (!services.length && (value?.ticket_price !== undefined || value?.destination !== undefined)) {
+                services = [{
+                    service_name: 'Air Ticket',
+                    destination: value?.destination || '',
+                    flight_date: value?.flight_date || '',
+                    ticket_price: value?.ticket_price || 0,
+                    ticket_agent_price: value?.ticket_agent_price ?? value?.agent_price ?? 0,
+                }];
+            }
+
+            return services.map((service) => ({
+                ...service,
+                service_name: String(service?.service_name || 'Air Ticket').trim(),
+                destination: String(service?.destination || '').trim(),
+                flight_date: service?.flight_date || '',
+                ticket_price: money(service?.ticket_price),
+                ticket_agent_price: money(service?.ticket_agent_price ?? service?.agent_price ?? 0),
+            }));
+        };
+
+        const airTicketTotals = (voucher) => {
+            const services = normalizeAirServices(voucher);
+            const ticketPrice = money(services.reduce((sum, service) => sum + money(service.ticket_price), 0));
+            const agentPrice = money(services.reduce((sum, service) => sum + money(service.ticket_agent_price), 0));
+            const discount = money(voucher?.discount);
+            const paid = money(voucher?.paid_amount);
+
+            // IMPORTANT:
+            // Customer due = Ticket Price - Discount - Paid.
+            // Business revenue = Ticket Price - Agent Price - Discount.
+            const revenue = money(Math.max(0, ticketPrice - agentPrice - discount));
+            const due = money(Math.max(0, ticketPrice - discount - paid));
+
+            return { services, ticketPrice, agentPrice, discount, paid, revenue, due };
+        };
+
+        const airTicketSummaryRow = (summary, date) => {
+            const target = getDateOnly(date);
+            let index = summary.findIndex((item) => getDateOnly(item?.date) === target);
+
+            if (index === -1) {
+                summary.push({
+                    date: target,
+                    computer_revenues: 0,
+                    stationary_revenues: 0,
+                    photocopy_revenues: 0,
+                    air_ticket_revenues: 0,
+                    others_revenues: [],
+                    due: 0,
+                    discount: [],
+                    expenses: [],
+                });
+                index = summary.length - 1;
+            }
+
+            return { row: summary[index], index, target };
+        };
+
+        /*
+         * The regular voucher APIs update daily_transactions directly.
+         * Air-ticket vouchers must do exactly the same thing.
+         *
+         * This helper deliberately updates ALL air-ticket financial fields
+         * together: air_ticket_revenues, due_list, discount and summary.
+         * It also supports old vouchers whose services were stored as a
+         * single ticket_price/destination pair.
+         */
+        const syncAirTicketDaily = async ({ daily, oldVoucher = null, newVoucher = null }) => {
+            const currentDaily = clone(daily);
+            const today = getDateOnly(currentDaily.date);
+            const oldTotals = oldVoucher
+                ? airTicketTotals(oldVoucher)
+                : { ticketPrice: 0, agentPrice: 0, discount: 0, paid: 0, revenue: 0, due: 0 };
+            const newTotals = newVoucher
+                ? airTicketTotals(newVoucher)
+                : { ticketPrice: 0, agentPrice: 0, discount: 0, paid: 0, revenue: 0, due: 0 };
+
+            const voucherDate = getDateOnly(
+                newVoucher?.transaction_date || newVoucher?.date ||
+                oldVoucher?.transaction_date || oldVoucher?.date
+            );
+            const voucherNo = newVoucher?.voucher_no ?? oldVoucher?.voucher_no;
+            const reference = AIR_TICKET_DAILY_REFERENCE(voucherNo);
+
+            const next = {
+                ...currentDaily,
+                air_ticket_revenues: money(currentDaily.air_ticket_revenues),
+                due_list: Array.isArray(currentDaily.due_list) ? clone(currentDaily.due_list) : [],
+                discount: Array.isArray(currentDaily.discount) ? clone(currentDaily.discount) : [],
+                summary: Array.isArray(currentDaily.summary) ? clone(currentDaily.summary) : [],
+            };
+
+            const revenueDelta = money(newTotals.revenue - oldTotals.revenue);
+
+            // Only today's voucher changes the active/current-day revenue.
+            if (voucherDate === today) {
+                next.air_ticket_revenues = money(next.air_ticket_revenues + revenueDelta);
+            }
+
+            // Remove this voucher's old due entry first, so edit/payment can
+            // never create duplicate due records.
+            next.due_list = next.due_list
+                .map((group) => ({
+                    ...group,
+                    due_data: Array.isArray(group?.due_data)
+                        ? group.due_data.filter((item) => String(item?.reference || '') !== reference)
+                        : [],
+                }))
+                .filter((group) => Array.isArray(group?.due_data) && group.due_data.length);
+
+            if (newVoucher && newTotals.due > 0) {
+                let group = next.due_list.find((item) => getDateOnly(item?.date) === voucherDate);
+                if (!group) {
+                    group = { date: voucherDate, due_data: [] };
+                    next.due_list.push(group);
+                }
+                group.due_data.push({ reference, amount: newTotals.due });
+            }
+
+            // Remove the voucher's previous discount and write the new total.
+            // Discount is NEVER included inside revenue.
+            next.discount = next.discount.filter(
+                (item) => String(item?.reference || '') !== reference
+            );
+            if (newVoucher && newTotals.discount > 0) {
+                next.discount.push({
+                    date: voucherDate,
+                    reference,
+                    amount: newTotals.discount,
                 });
             }
-        });
 
+            // Update the matching historical/current summary row.
+            // For today's voucher, the summary must mirror today's active
+            // air_ticket_revenues. For historical payment/edit operations,
+            // only the historical row is changed.
+            const summaryInfo = airTicketSummaryRow(next.summary, voucherDate);
+            const existingRow = summaryInfo.row || {};
+            const existingAirRevenue = money(existingRow.air_ticket_revenues);
 
-        app.patch('/daily_revenue_transactions', async (req, res) => {
-            try {
-                const trData = req.body;
-
-                const {
-                    date,
-                    amount,
-                    category,
-                    comment
-                } = trData;
-
-                const existing = await dailyTransactionsCollection.findOne({});
-
-                if (!existing) {
-                    return res.status(404).send({
-                        error: 'Daily transaction document not found'
-                    });
-                }
-
-                const filter = {
-                    _id: existing._id
-                };
-
-                if (category === 'Computer') {
-                    const result = await dailyTransactionsCollection.updateOne(
-                        filter,
-                        {
-                            $inc: {
-                                computer_revenues: amount
-                            },
-                            $set: {
-                                date: date
-                            }
-                        }
-                    );
-
-                    res.send(result);
-
-                } else if (category === 'Stationary') {
-                    const result = await dailyTransactionsCollection.updateOne(
-                        filter,
-                        {
-                            $inc: {
-                                stationary_revenues: amount
-                            },
-                            $set: {
-                                date: date
-                            }
-                        }
-                    );
-
-                    res.send(result);
-
-                } else if (category === 'Photocopy') {
-                    const result = await dailyTransactionsCollection.updateOne(
-                        filter,
-                        {
-                            $inc: {
-                                photocopy_revenues: amount
-                            },
-                            $set: {
-                                date: date
-                            }
-                        }
-                    );
-
-                    res.send(result);
-
-                } else if (category === 'Others') {
-                    const result = await dailyTransactionsCollection.updateOne(
-                        filter,
-                        {
-                            $push: {
-                                others_revenues: {
-                                    amount,
-                                    comment
-                                }
-                            },
-                            $set: {
-                                date: date
-                            }
-                        }
-                    );
-
-                    res.send(result);
-                }
-            } catch (err) {
-                console.error('daily_revenue_transactions error:', err);
-
-                res.status(500).send({
-                    error: 'Revenue transaction update failed',
-                    details: err.message
-                });
+            let summaryAirRevenue;
+            if (voucherDate === today) {
+                summaryAirRevenue = next.air_ticket_revenues;
+            } else {
+                summaryAirRevenue = money(existingAirRevenue + revenueDelta);
             }
-        });
 
+            next.summary[summaryInfo.index] = {
+                ...existingRow,
+                date: summaryInfo.target,
+                air_ticket_revenues: summaryAirRevenue,
+                due: sumDueForDate(next.due_list, summaryInfo.target),
+                discount: next.discount.filter(
+                    (item) => getDateOnly(item?.date) === summaryInfo.target
+                ),
+            };
 
-        app.patch('/daily_expense_transactions', async (req, res) => {
-            try {
-                const trData = req.body;
-
-                const {
-                    date,
-                    amount,
-                    comment
-                } = trData;
-
-                const exData = {
-                    amount,
-                    comment
-                };
-
-                const existing = await dailyTransactionsCollection.findOne({});
-
-                if (!existing) {
-                    return res.status(404).send({
-                        error: 'Daily transaction document not found'
-                    });
+            const result = await dailyTransactionsCollection.updateOne(
+                { _id: daily._id },
+                {
+                    $set: {
+                        air_ticket_revenues: next.air_ticket_revenues,
+                        due_list: next.due_list,
+                        discount: next.discount,
+                        summary: next.summary,
+                    },
                 }
+            );
 
-                const filter = {
-                    _id: existing._id
-                };
-
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $push: {
-                            expenses: exData
-                        },
-                        $set: {
-                            date: date
-                        }
-                    }
-                );
-
-                res.send(result);
-            } catch (err) {
-                console.error('daily_expense_transactions error:', err);
-
-                res.status(500).send({
-                    error: 'Expense transaction update failed',
-                    details: err.message
-                });
+            if (!result.acknowledged) {
+                throw new Error('Daily Transactions update was not acknowledged.');
             }
-        });
 
+            return { daily: next, result };
+        };
 
-        app.patch('/reset_daily_transactions', async (req, res) => {
+        /* =========================================================
+           AIR TICKET CLIENT CORNER
+        ========================================================= */
+
+        app.get('/air_ticket_client_corner', async (req, res) => {
             try {
-                const receivedData = req.body;
-
-                const {
-                    update_info,
-                    category,
-                    date,
-                    computer_revenues,
-                    stationary_revenues,
-                    photocopy_revenues,
-                    others_revenues,
-                    expenses
-                } = receivedData;
-
-                const trData = {
-                    date,
-                    computer_revenues,
-                    stationary_revenues,
-                    photocopy_revenues,
-                    others_revenues,
-                    expenses
-                };
-
-                const existing = await dailyTransactionsCollection.findOne({});
-
-                if (!existing) {
-                    return res.status(404).send({
-                        error: 'Daily transaction document not found'
-                    });
-                }
-
-                const filter = {
-                    _id: existing._id
-                };
-
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $push: {
-                            summary: trData
-                        },
-                        $set: {
-                            date: update_info?.update_date,
-                            computer_revenues:
-                                category === 'Computer'
-                                    ? update_info?.amount
-                                    : 0,
-                            stationary_revenues:
-                                category === 'Stationary'
-                                    ? update_info?.amount
-                                    : 0,
-                            photocopy_revenues:
-                                category === 'Photocopy'
-                                    ? update_info?.amount
-                                    : 0,
-                            others_revenues:
-                                category === 'Others'
-                                    ? [{
-                                        amount: update_info?.amount,
-                                        comment: update_info?.comment
-                                    }]
-                                    : [],
-                            expenses:
-                                category === 'Expense'
-                                    ? [{
-                                        amount: update_info?.amount,
-                                        comment: update_info?.comment
-                                    }]
-                                    : []
-                        }
-                    }
-                );
-
+                const result = await airTicketClientCornerCollection.find().toArray();
                 res.send(result);
             } catch (err) {
-                console.error('reset_daily_transactions error:', err);
-
-                res.status(500).send({
-                    error: 'Daily transaction reset failed',
-                    details: err.message
-                });
+                console.error('air_ticket_client_corner error:', err);
+                res.status(500).send({ error: 'Internal server error', details: err.message });
             }
         });
 
-
-        app.patch('/close_daily_transactions', async (req, res) => {
+        app.get('/air_ticket_client_details/:id', async (req, res) => {
             try {
-                const receivedData = req.body;
-
-                const {
-                    date,
-                    computer_revenues,
-                    stationary_revenues,
-                    photocopy_revenues,
-                    others_revenues,
-                    expenses
-                } = receivedData;
-
-                const trData = {
-                    date,
-                    computer_revenues,
-                    stationary_revenues,
-                    photocopy_revenues,
-                    others_revenues,
-                    expenses
-                };
-
-                const existing = await dailyTransactionsCollection.findOne({});
-
-                if (!existing) {
-                    return res.status(404).send({
-                        error: 'Daily transaction document not found'
-                    });
-                }
-
-                const filter = {
-                    _id: existing._id
-                };
-
-                const result = await dailyTransactionsCollection.updateOne(
-                    filter,
-                    {
-                        $push: {
-                            summary: trData
-                        },
-                        $set: {
-                            computer_revenues: 0,
-                            stationary_revenues: 0,
-                            photocopy_revenues: 0,
-                            others_revenues: [],
-                            expenses: []
-                        }
-                    }
-                );
-
+                const id = req.params.id;
+                if (!ObjectId.isValid(id)) return res.status(400).send({ error: 'Invalid client id' });
+                const result = await airTicketClientCornerCollection.findOne({ _id: new ObjectId(id) });
+                if (!result) return res.status(404).send({ error: 'Client not found' });
                 res.send(result);
             } catch (err) {
-                console.error('close_daily_transactions error:', err);
-
-                res.status(500).send({
-                    error: 'Daily transaction close failed',
-                    details: err.message
-                });
+                res.status(500).send({ error: 'Internal server error', details: err.message });
             }
         });
 
-
-        app.patch('/update_expenses', async (req, res) => {
+        app.delete('/air_ticket_client/:id', async (req, res) => {
             try {
-                const receivedData = req.body;
+                const id = req.params.id;
+                if (!ObjectId.isValid(id)) return res.status(400).send({ error: 'Invalid client id' });
+                const result = await airTicketClientCornerCollection.deleteOne({ _id: new ObjectId(id) });
+                res.send(result);
+            } catch (err) {
+                res.status(500).send({ error: 'Internal server error', details: err.message });
+            }
+        });
 
-                const existing = await dailyTransactionsCollection.findOne({});
-
-                if (!existing) {
-                    return res.status(404).send({
-                        error: 'Daily transaction document not found'
-                    });
+        app.post('/air_ticket_new_client', async (req, res) => {
+            try {
+                const data = req.body || {};
+                const voucherInput = Array.isArray(data.vouchers) ? data.vouchers[0] : null;
+                if (!data.name || !voucherInput) {
+                    return res.status(400).send({ success: false, error: 'Client name and voucher are required' });
                 }
 
-                const filter = {
-                    _id: existing._id
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                const voucherDate = getDateOnly(voucherInput.date) || today;
+                if (voucherDate !== today) {
+                    return res.status(409).send({ success: false, error: 'Voucher date must be today.' });
+                }
+
+                const totals = airTicketTotals(voucherInput);
+                if (!totals.services.length) return res.status(400).send({ success: false, error: 'At least one service is required' });
+                if (totals.services.some(service => service.ticket_price <= 0 || service.ticket_agent_price < 0)) {
+                    return res.status(400).send({ success: false, error: 'Invalid service price' });
+                }
+                if (totals.discount < 0 || totals.discount > totals.ticketPrice) return res.status(400).send({ success: false, error: 'Invalid discount' });
+                if (totals.paid < 0 || totals.paid > money(totals.ticketPrice - totals.discount)) return res.status(400).send({ success: false, error: 'Invalid paid amount' });
+
+                const voucher = {
+                    ...voucherInput,
+                    date: voucherInput.date || `${today}, ${new Date().toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
+                    voucher_no: String(voucherInput.voucher_no),
+                    services: totals.services,
+                    ticket_price: totals.ticketPrice,
+                    ticket_agent_price: totals.agentPrice,
+                    paid_amount: totals.paid,
+                    discount: totals.discount,
+                    due_amount: totals.due,
+                    payment_status: totals.due > 0 ? 'Unpaid' : 'Paid',
                 };
 
-                if (receivedData?.category === 'expenses') {
-                    const result = await dailyTransactionsCollection.updateOne(
-                        filter,
-                        {
-                            $set: {
-                                expenses: receivedData?.update
-                            }
-                        }
-                    );
+                const clientData = { ...data, vouchers: [voucher] };
+                const result = await airTicketClientCornerCollection.insertOne(clientData);
+                if (!result.acknowledged) return res.status(500).send({ success: false, error: 'Client creation failed' });
 
-                    res.send(result);
+                const dailySync = await syncAirTicketDaily({ daily, newVoucher: voucher });
+                const dailyResult = dailySync.result;
 
-                } else if (receivedData?.category === 'others_revenues') {
-                    const result = await dailyTransactionsCollection.updateOne(
-                        filter,
-                        {
-                            $set: {
-                                others_revenues: receivedData?.update
-                            }
-                        }
-                    );
-
-                    res.send(result);
-                }
+                res.send({ success: true, acknowledged: true, client_id: result.insertedId, voucher, dailyResult });
             } catch (err) {
-                console.error('update_expenses error:', err);
-
-                res.status(500).send({
-                    error: 'Expense/revenue update failed',
-                    details: err.message
-                });
+                console.error('air_ticket_new_client error:', err);
+                res.status(500).send({ success: false, error: 'Insert failed', details: err.message });
             }
         });
 
-
-        app.patch("/delete_summary", async (req, res) => {
+        app.put('/air_ticket_new_voucher/:id', async (req, res) => {
             try {
-                const {
-                    startDate,
-                    endDate
-                } = req.body;
+                const id = req.params.id;
+                if (!ObjectId.isValid(id)) return res.status(400).send({ success: false, error: 'Invalid client id' });
+                const clientFilter = { _id: new ObjectId(id) };
+                const client = await airTicketClientCornerCollection.findOne(clientFilter);
+                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
 
-                const start = new Date(startDate);
-                const end = new Date(endDate);
+                const data = req.body || {};
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                if (getDateOnly(data.date) !== today) return res.status(409).send({ success: false, error: 'Voucher date must be today.' });
 
-                const doc = await dailyTransactionsCollection.findOne({});
+                const voucherNo = String(data.voucher_no || '').trim();
+                if (!voucherNo) return res.status(400).send({ success: false, error: 'Voucher number is required' });
+                if ((client.vouchers || []).some(v => String(v?.voucher_no) === voucherNo)) return res.status(409).send({ success: false, error: 'Voucher number already exists for this client.' });
 
-                if (!doc) {
-                    return res.status(404).send({
-                        error: 'Daily transaction document not found'
+                const totals = airTicketTotals(data);
+                if (!totals.services.length) return res.status(400).send({ success: false, error: 'At least one service is required' });
+                if (totals.services.some(service => service.ticket_price <= 0 || service.ticket_agent_price < 0)) return res.status(400).send({ success: false, error: 'Invalid service price' });
+                if (totals.discount < 0 || totals.discount > totals.ticketPrice) return res.status(400).send({ success: false, error: 'Invalid discount' });
+                if (totals.paid < 0 || totals.paid > money(totals.ticketPrice - totals.discount)) return res.status(400).send({ success: false, error: 'Invalid paid amount' });
+
+                const voucher = {
+                    ...data,
+                    date: data.date,
+                    voucher_no: voucherNo,
+                    services: totals.services,
+                    ticket_price: totals.ticketPrice,
+                    ticket_agent_price: totals.agentPrice,
+                    paid_amount: totals.paid,
+                    discount: totals.discount,
+                    due_amount: totals.due,
+                    payment_status: totals.due > 0 ? 'Unpaid' : 'Paid',
+                };
+
+                const vouchers = Array.isArray(client.vouchers) ? clone(client.vouchers) : [];
+                if (vouchers.length >= 10) vouchers.shift();
+                vouchers.push(voucher);
+
+                const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
+                if (totals.paid > 0) {
+                    if (transections.length >= 15) transections.shift();
+                    transections.push({ date: voucher.date, reference_voucher: voucherNo, paid_amount: totals.paid, transection_amount: totals.paid, due_amount: totals.due, payment_status: voucher.payment_status });
+                }
+
+                const dailySync = await syncAirTicketDaily({ daily, newVoucher: voucher });
+                const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
+                const dailyResult = dailySync.result;
+
+                res.send({ success: clientResult.acknowledged && dailyResult.acknowledged, acknowledged: clientResult.acknowledged, voucher, dailyResult });
+            } catch (err) {
+                console.error('air_ticket_new_voucher error:', err);
+                res.status(500).send({ success: false, error: 'Voucher creation failed', details: err.message });
+            }
+        });
+
+        app.put('/air_ticket_take_payment/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                if (!ObjectId.isValid(id)) return res.status(400).send({ success: false, error: 'Invalid client id' });
+                const clientFilter = { _id: new ObjectId(id) };
+                const client = await airTicketClientCornerCollection.findOne(clientFilter);
+                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
+
+                const voucherNo = String(req.body?.voucher_no || '');
+                const voucherIndex = (client.vouchers || []).findIndex(v => String(v?.voucher_no) === voucherNo);
+                if (voucherIndex < 0) return res.status(404).send({ success: false, error: 'Voucher not found' });
+
+                const oldVoucher = clone(client.vouchers[voucherIndex]);
+                const oldTotals = airTicketTotals(oldVoucher);
+                const payment = money(req.body?.transection_amount);
+                const additionalDiscount = money(req.body?.additional_discount ?? req.body?.more_discount ?? 0);
+                if (payment <= 0 && additionalDiscount <= 0) return res.status(400).send({ success: false, error: 'Payment or additional discount is required' });
+                if (payment + additionalDiscount > oldTotals.due) return res.status(400).send({ success: false, error: 'Payment plus discount cannot exceed current due' });
+
+                const updatedVoucher = {
+                    ...oldVoucher,
+                    paid_amount: money(oldTotals.paid + payment),
+                    discount: money(oldTotals.discount + additionalDiscount),
+                };
+                const newTotals = airTicketTotals(updatedVoucher);
+                updatedVoucher.ticket_price = newTotals.ticketPrice;
+                updatedVoucher.ticket_agent_price = newTotals.agentPrice;
+                updatedVoucher.due_amount = newTotals.due;
+                updatedVoucher.payment_status = newTotals.due > 0 ? 'Unpaid' : 'Paid';
+
+                const vouchers = clone(client.vouchers);
+                vouchers[voucherIndex] = updatedVoucher;
+                const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
+                if (payment > 0) {
+                    if (transections.length >= 15) transections.shift();
+                    transections.push({
+                        date: req.body?.date || getTodayDateOnly(),
+                        reference_voucher: voucherNo,
+                        paid_amount: updatedVoucher.paid_amount,
+                        transection_amount: payment,
+                        due_amount: updatedVoucher.due_amount,
+                        payment_status: updatedVoucher.payment_status,
                     });
                 }
 
-                const filteredSummary = doc.summary.filter(item => {
+                const daily = await ensureToday();
+                const dailySync = await syncAirTicketDaily({ daily, oldVoucher, newVoucher: updatedVoucher });
+                const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
+                const dailyResult = dailySync.result;
 
-                    const itemDate = new Date(item.date);
-
-                    // keep items OUTSIDE the selected range
-                    return !(itemDate >= start && itemDate <= end);
-
-                });
-
-                const result = await dailyTransactionsCollection.updateOne(
-                    {},
-                    {
-                        $set: {
-                            summary: filteredSummary
-                        }
-                    }
-                );
-
-                res.send(result);
-
-            } catch (error) {
-                console.error('delete_summary error:', error);
-
-                res.status(500).send({
-                    error: "Delete failed",
-                    details: error.message
-                });
+                res.send({ success: clientResult.acknowledged && dailyResult.acknowledged, voucher: updatedVoucher, dailyResult });
+            } catch (err) {
+                console.error('air_ticket_take_payment error:', err);
+                res.status(500).send({ success: false, error: 'Payment update failed', details: err.message });
             }
         });
+
+        app.patch('/air_ticket_edit_voucher/:id', async (req, res) => {
+            try {
+                const id = req.params.id;
+                if (!ObjectId.isValid(id)) return res.status(400).send({ success: false, error: 'Invalid client id' });
+                const clientFilter = { _id: new ObjectId(id) };
+                const client = await airTicketClientCornerCollection.findOne(clientFilter);
+                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
+
+                const voucherNo = String(req.body?.voucher_no || '').trim();
+                const vouchers = Array.isArray(client.vouchers) ? clone(client.vouchers) : [];
+                const voucherIndex = vouchers.findIndex(v => String(v?.voucher_no) === voucherNo);
+                if (voucherIndex < 0) return res.status(404).send({ success: false, error: 'Voucher not found' });
+
+                const oldVoucher = vouchers[voucherIndex];
+                const daily = await ensureToday();
+                const today = getDateOnly(daily.date);
+                if (getDateOnly(oldVoucher.date) !== today) {
+                    return res.status(409).send({ success: false, code: 'VOUCHER_EDIT_LOCKED', error: 'This voucher can only be edited on the date it was created.' });
+                }
+
+                const merged = {
+                    ...oldVoucher,
+                    ...req.body,
+                    voucher_no: voucherNo,
+                    date: oldVoucher.date,
+                    paid_amount: oldVoucher.paid_amount,
+                    discount: req.body?.discount !== undefined ? req.body.discount : oldVoucher.discount,
+                };
+                const totals = airTicketTotals(merged);
+                if (!totals.services.length) return res.status(400).send({ success: false, error: 'At least one service is required' });
+                if (totals.services.some(service => service.ticket_price <= 0 || service.ticket_agent_price < 0)) return res.status(400).send({ success: false, error: 'Invalid service price' });
+                if (totals.discount + totals.paid > totals.ticketPrice) return res.status(400).send({ success: false, error: 'Discount plus paid amount cannot exceed ticket price' });
+
+                const updatedVoucher = {
+                    ...oldVoucher,
+                    services: totals.services,
+                    ticket_price: totals.ticketPrice,
+                    ticket_agent_price: totals.agentPrice,
+                    discount: totals.discount,
+                    paid_amount: totals.paid,
+                    due_amount: totals.due,
+                    payment_status: totals.due > 0 ? 'Unpaid' : 'Paid',
+                };
+
+                vouchers[voucherIndex] = updatedVoucher;
+                const dailySync = await syncAirTicketDaily({ daily, oldVoucher, newVoucher: updatedVoucher });
+                const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers } });
+                const dailyResult = dailySync.result;
+
+                res.send({
+                    success: clientResult.acknowledged && dailyResult.acknowledged,
+                    voucher: updatedVoucher,
+                    dailyResult,
+                    changes: {
+                        revenue_delta: money(airTicketTotals(updatedVoucher).revenue - airTicketTotals(oldVoucher).revenue),
+                        due_delta: money(updatedVoucher.due_amount - money(oldVoucher.due_amount)),
+                        discount_delta: money(updatedVoucher.discount - money(oldVoucher.discount)),
+                    },
+                });
+            } catch (err) {
+                console.error('air_ticket_edit_voucher error:', err);
+                res.status(500).send({ success: false, error: 'Air ticket voucher edit failed', details: err.message });
+            }
+        });
+
+
+
+
+
+
+        // ============================================      ============================================
+        // ==============================================   ==============================================
+        // ===============================================================================================
+
 
         await client.db("admin").command({ ping: 1 });
     } finally {
