@@ -1222,6 +1222,8 @@ async function run() {
             others_revenues: [],
             expenses: [],
             summary: [],
+            given_loan_list: [],
+            taken_loan_list: [],
         });
 
         const normalizeProducts = (products = []) => {
@@ -1354,6 +1356,8 @@ async function run() {
                         expenses: [],
                         discount: [],
                         summary,
+                        given_loan_list: Array.isArray(daily.given_loan_list) ? daily.given_loan_list : [],
+                        taken_loan_list: Array.isArray(daily.taken_loan_list) ? daily.taken_loan_list : [],
                     },
                 }
             );
@@ -1971,6 +1975,145 @@ async function run() {
             } catch (error) {
                 console.error('transection_details error:', error);
                 res.status(500).send({ acknowledged: false, error: 'Staff transaction update failed', details: error.message });
+            }
+        });
+
+        /* =========================================================
+           LOAN MANAGEMENT
+
+           Loans live on the main daily_transactions document and are
+           intentionally preserved across business-day rollover/closing.
+        ========================================================= */
+
+        app.get('/daily_transactions/loans', async (req, res) => {
+            try {
+                const daily = await ensureToday();
+                res.send({
+                    success: true,
+                    given_loan_list: Array.isArray(daily.given_loan_list) ? daily.given_loan_list : [],
+                    taken_loan_list: Array.isArray(daily.taken_loan_list) ? daily.taken_loan_list : [],
+                });
+            } catch (error) {
+                console.error('loan list error:', error);
+                res.status(500).send({ success: false, error: 'Failed to load loan lists.', details: error.message });
+            }
+        });
+
+        app.post('/daily_transactions/loan', async (req, res) => {
+            try {
+                const type = String(req.body?.type || '').trim();
+                const name = String(req.body?.name || '').trim();
+                const amount = money(req.body?.amount);
+                const date = getDateOnly(req.body?.date);
+
+                if (!['Given Loan', 'Taken Loan'].includes(type)) {
+                    return res.status(400).send({ success: false, error: 'Loan type must be Given Loan or Taken Loan.' });
+                }
+                if (!name) return res.status(400).send({ success: false, error: 'Person name is required.' });
+                if (amount <= 0) return res.status(400).send({ success: false, error: 'Loan amount must be greater than 0.' });
+                if (!date) return res.status(400).send({ success: false, error: 'Loan date is required.' });
+
+                const daily = await ensureToday();
+                const loan = {
+                    date,
+                    name,
+                    amount,
+                    payback_transactions: [],
+                };
+                const field = type === 'Given Loan' ? 'given_loan_list' : 'taken_loan_list';
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    { $push: { [field]: loan } }
+                );
+
+                if (!result.acknowledged) {
+                    return res.status(500).send({ success: false, error: 'Loan could not be saved.' });
+                }
+
+                const updated = await dailyTransactionsCollection.findOne({ _id: daily._id });
+                res.send({
+                    success: true,
+                    acknowledged: result.acknowledged,
+                    loan,
+                    given_loan_list: updated.given_loan_list || [],
+                    taken_loan_list: updated.taken_loan_list || [],
+                });
+            } catch (error) {
+                console.error('loan create error:', error);
+                res.status(500).send({ success: false, error: 'Loan creation failed.', details: error.message });
+            }
+        });
+
+        app.patch('/daily_transactions/loan/payback', async (req, res) => {
+            try {
+                const type = String(req.body?.type || '').trim();
+                const loanIndex = Number(req.body?.loanIndex);
+                const amount = money(req.body?.amount);
+                const paybackDate = getTodayDateOnly();
+
+                if (!['Given Loan', 'Taken Loan'].includes(type)) {
+                    return res.status(400).send({ success: false, error: 'Invalid loan type.' });
+                }
+                if (!Number.isInteger(loanIndex) || loanIndex < 0) {
+                    return res.status(400).send({ success: false, error: 'Invalid loan selection.' });
+                }
+                if (amount <= 0) {
+                    return res.status(400).send({ success: false, error: 'Payback amount must be greater than 0.' });
+                }
+
+                const daily = await ensureToday();
+                const field = type === 'Given Loan' ? 'given_loan_list' : 'taken_loan_list';
+                const loans = Array.isArray(daily[field]) ? clone(daily[field]) : [];
+                const loan = loans[loanIndex];
+
+                if (!loan) return res.status(404).send({ success: false, error: 'Loan not found.' });
+
+                const originalAmount = money(loan.amount);
+                const paidAlready = Array.isArray(loan.payback_transactions)
+                    ? money(loan.payback_transactions.reduce((sum, item) => sum + money(item?.amount), 0))
+                    : 0;
+                const currentDue = money(originalAmount - paidAlready);
+
+                if (currentDue <= 0) {
+                    loans.splice(loanIndex, 1);
+                    await dailyTransactionsCollection.updateOne({ _id: daily._id }, { $set: { [field]: loans } });
+                    return res.status(409).send({ success: false, error: 'This loan is already fully paid.' });
+                }
+
+                if (amount > currentDue) {
+                    return res.status(400).send({ success: false, error: `Payback cannot exceed current due of ${currentDue}.` });
+                }
+
+                if (!Array.isArray(loan.payback_transactions)) loan.payback_transactions = [];
+                loan.payback_transactions.push({ date: paybackDate, amount });
+
+                const remainingDue = money(currentDue - amount);
+                if (remainingDue <= 0) {
+                    loans.splice(loanIndex, 1);
+                }
+
+                const result = await dailyTransactionsCollection.updateOne(
+                    { _id: daily._id },
+                    { $set: { [field]: loans } }
+                );
+
+                if (!result.acknowledged) {
+                    return res.status(500).send({ success: false, error: 'Loan payback could not be saved.' });
+                }
+
+                const updated = await dailyTransactionsCollection.findOne({ _id: daily._id });
+                res.send({
+                    success: true,
+                    acknowledged: result.acknowledged,
+                    remaining_due: remainingDue,
+                    removed: remainingDue <= 0,
+                    given_loan_list: updated.given_loan_list || [],
+                    taken_loan_list: updated.taken_loan_list || [],
+                });
+            } catch (error) {
+                console.error('loan payback error:', error);
+                res.status(500).send({ success: false, error: 'Loan payback failed.', details: error.message });
             }
         });
 
