@@ -2962,328 +2962,1421 @@ async function run() {
             `Air Ticket Voucher no: ${String(voucherNo)}`;
 
         const normalizeAirServices = (value) => {
-            let services = Array.isArray(value?.services) ? value.services : [];
+            let services = Array.isArray(value?.services)
+                ? value.services
+                : [];
 
             // Backward compatibility with old single-ticket documents.
-            if (!services.length && (value?.ticket_price !== undefined || value?.destination !== undefined)) {
-                services = [{
-                    service_name: 'Air Ticket',
-                    destination: value?.destination || '',
-                    flight_date: value?.flight_date || '',
-                    ticket_price: value?.ticket_price || 0,
-                    ticket_agent_price: value?.ticket_agent_price ?? value?.agent_price ?? 0,
-                }];
+            if (
+                !services.length &&
+                (
+                    value?.ticket_price !== undefined ||
+                    value?.destination !== undefined
+                )
+            ) {
+                services = [
+                    {
+                        service_name: 'Air Ticket',
+                        destination: value?.destination || '',
+                        flight_date: value?.flight_date || '',
+                        ticket_price: value?.ticket_price || 0,
+                        ticket_agent_price:
+                            value?.ticket_agent_price ??
+                            value?.agent_price ??
+                            0,
+                    },
+                ];
             }
 
             return services.map((service) => ({
                 ...service,
-                service_name: String(service?.service_name || 'Air Ticket').trim(),
-                destination: String(service?.destination || '').trim(),
+
+                service_name: String(
+                    service?.service_name || 'Air Ticket'
+                ).trim(),
+
+                destination: String(
+                    service?.destination || ''
+                ).trim(),
+
                 flight_date: service?.flight_date || '',
-                ticket_price: money(service?.ticket_price),
-                ticket_agent_price: money(service?.ticket_agent_price ?? service?.agent_price ?? 0),
+
+                ticket_price: money(
+                    service?.ticket_price
+                ),
+
+                ticket_agent_price: money(
+                    service?.ticket_agent_price ??
+                    service?.agent_price ??
+                    0
+                ),
             }));
         };
 
         const airTicketTotals = (voucher) => {
             const services = normalizeAirServices(voucher);
-            const ticketPrice = money(services.reduce((sum, service) => sum + money(service.ticket_price), 0));
-            const agentPrice = money(services.reduce((sum, service) => sum + money(service.ticket_agent_price), 0));
-            const discount = money(voucher?.discount);
-            const paid = money(voucher?.paid_amount);
 
-            // IMPORTANT:
-            // Customer due = Ticket Price - Discount - Paid.
-            // Business revenue = Ticket Price - Agent Price - Discount.
-            const revenue = money(Math.max(0, ticketPrice - agentPrice - discount));
-            const due = money(Math.max(0, ticketPrice - discount - paid));
+            const ticketPrice = money(
+                services.reduce(
+                    (sum, service) =>
+                        sum + money(service.ticket_price),
+                    0
+                )
+            );
 
-            return { services, ticketPrice, agentPrice, discount, paid, revenue, due };
+            const agentPrice = money(
+                services.reduce(
+                    (sum, service) =>
+                        sum + money(service.ticket_agent_price),
+                    0
+                )
+            );
+
+            const discount = money(
+                voucher?.discount
+            );
+
+            const paid = money(
+                voucher?.paid_amount
+            );
+
+            /*
+             * IMPORTANT:
+             *
+             * Customer Due
+             * = Ticket Price - Discount - Paid
+             *
+             * Business Revenue
+             * = Ticket Price - Agent Price - Discount
+             *
+             * Air Ticket Sell
+             * = Ticket Price - Discount
+             */
+
+            const revenue = money(
+                Math.max(
+                    0,
+                    ticketPrice -
+                    agentPrice -
+                    discount
+                )
+            );
+
+            const due = money(
+                Math.max(
+                    0,
+                    ticketPrice -
+                    discount -
+                    paid
+                )
+            );
+
+            return {
+                services,
+                ticketPrice,
+                agentPrice,
+                discount,
+                paid,
+                revenue,
+                due,
+            };
         };
 
-        const airTicketSummaryRow = (summary, date) => {
+        const airTicketSummaryRow = (
+            summary,
+            date
+        ) => {
             const target = getDateOnly(date);
-            let index = summary.findIndex((item) => getDateOnly(item?.date) === target);
+
+            let index = summary.findIndex(
+                (item) =>
+                    getDateOnly(item?.date) === target
+            );
 
             if (index === -1) {
                 summary.push({
                     date: target,
+
                     computer_revenues: 0,
+
                     stationary_revenues: 0,
+
                     photocopy_revenues: 0,
+
                     air_ticket_revenues: 0,
+
+                    /*
+                     * Total Air Ticket selling amount
+                     * after discount.
+                     */
+                    air_ticket_sell: 0,
+
                     others_revenues: [],
+
                     due: 0,
+
                     discount: [],
+
                     expenses: [],
                 });
+
                 index = summary.length - 1;
             }
 
-            return { row: summary[index], index, target };
+            return {
+                row: summary[index],
+                index,
+                target,
+            };
         };
 
+
         /*
-         * The regular voucher APIs update daily_transactions directly.
-         * Air-ticket vouchers must do exactly the same thing.
+         * ============================================================
+         * AIR TICKET DAILY TRANSACTION SYNC
+         * ============================================================
          *
-         * This helper deliberately updates ALL air-ticket financial fields
-         * together: air_ticket_revenues, due_list, discount and summary.
-         * It also supports old vouchers whose services were stored as a
-         * single ticket_price/destination pair.
+         * Air-ticket voucher create/edit/payment-এর সময়
+         * এই helper:
+         *
+         * 1. air_ticket_revenues update করবে
+         * 2. air_ticket_sell update করবে
+         * 3. due_list update করবে
+         * 4. discount update করবে
+         * 5. summary update করবে
+         *
+         * Air Ticket Sell:
+         *     ticket_price - discount
+         *
+         * Air Ticket Revenue:
+         *     ticket_price - agent_price - discount
+         *
+         * Customer Due:
+         *     ticket_price - discount - paid
+         *
+         * Discount revenue থেকে আলাদা থাকবে।
          */
-        const syncAirTicketDaily = async ({ daily, oldVoucher = null, newVoucher = null }) => {
+
+        const syncAirTicketDaily = async ({
+            daily,
+            oldVoucher = null,
+            newVoucher = null,
+        }) => {
             const currentDaily = clone(daily);
-            const today = getDateOnly(currentDaily.date);
+
+            const today = getDateOnly(
+                currentDaily.date
+            );
+
             const oldTotals = oldVoucher
                 ? airTicketTotals(oldVoucher)
-                : { ticketPrice: 0, agentPrice: 0, discount: 0, paid: 0, revenue: 0, due: 0 };
+                : {
+                    ticketPrice: 0,
+                    agentPrice: 0,
+                    discount: 0,
+                    paid: 0,
+                    revenue: 0,
+                    due: 0,
+                };
+
             const newTotals = newVoucher
                 ? airTicketTotals(newVoucher)
-                : { ticketPrice: 0, agentPrice: 0, discount: 0, paid: 0, revenue: 0, due: 0 };
+                : {
+                    ticketPrice: 0,
+                    agentPrice: 0,
+                    discount: 0,
+                    paid: 0,
+                    revenue: 0,
+                    due: 0,
+                };
 
             const voucherDate = getDateOnly(
-                newVoucher?.transaction_date || newVoucher?.date ||
-                oldVoucher?.transaction_date || oldVoucher?.date
+                newVoucher?.transaction_date ||
+                newVoucher?.date ||
+                oldVoucher?.transaction_date ||
+                oldVoucher?.date
             );
-            const voucherNo = newVoucher?.voucher_no ?? oldVoucher?.voucher_no;
-            const reference = AIR_TICKET_DAILY_REFERENCE(voucherNo);
 
+            const voucherNo =
+                newVoucher?.voucher_no ??
+                oldVoucher?.voucher_no;
+
+            const reference =
+                AIR_TICKET_DAILY_REFERENCE(
+                    voucherNo
+                );
+
+            /*
+             * Prepare current daily transaction.
+             */
             const next = {
                 ...currentDaily,
-                air_ticket_revenues: money(currentDaily.air_ticket_revenues),
-                due_list: Array.isArray(currentDaily.due_list) ? clone(currentDaily.due_list) : [],
-                discount: Array.isArray(currentDaily.discount) ? clone(currentDaily.discount) : [],
-                summary: Array.isArray(currentDaily.summary) ? clone(currentDaily.summary) : [],
+
+                air_ticket_revenues: money(
+                    currentDaily.air_ticket_revenues
+                ),
+
+                air_ticket_sell: money(
+                    currentDaily.air_ticket_sell
+                ),
+
+                due_list: Array.isArray(
+                    currentDaily.due_list
+                )
+                    ? clone(currentDaily.due_list)
+                    : [],
+
+                discount: Array.isArray(
+                    currentDaily.discount
+                )
+                    ? clone(currentDaily.discount)
+                    : [],
+
+                summary: Array.isArray(
+                    currentDaily.summary
+                )
+                    ? clone(currentDaily.summary)
+                    : [],
             };
 
-            const revenueDelta = money(newTotals.revenue - oldTotals.revenue);
 
-            // Only today's voucher changes the active/current-day revenue.
+            /*
+             * =========================================================
+             * REVENUE DELTA
+             * =========================================================
+             *
+             * Example:
+             *
+             * Old revenue = 2,000
+             * New revenue = 3,000
+             *
+             * Delta = +1,000
+             */
+            const revenueDelta = money(
+                newTotals.revenue -
+                oldTotals.revenue
+            );
+
+
+            /*
+             * =========================================================
+             * AIR TICKET SELL DELTA
+             * =========================================================
+             *
+             * Air Ticket Sell = Ticket Price - Discount
+             *
+             * Example:
+             *
+             * Old ticket price = 10,000
+             * Old discount     = 200
+             * Old sell         = 9,800
+             *
+             * New ticket price = 15,000
+             * New discount     = 500
+             * New sell         = 14,500
+             *
+             * Delta = +4,700
+             */
+            const sellDelta = money(
+                (
+                    newTotals.ticketPrice -
+                    newTotals.discount
+                ) -
+                (
+                    oldTotals.ticketPrice -
+                    oldTotals.discount
+                )
+            );
+
+
+            /*
+             * =========================================================
+             * UPDATE CURRENT DAY
+             * =========================================================
+             */
             if (voucherDate === today) {
-                next.air_ticket_revenues = money(next.air_ticket_revenues + revenueDelta);
+                next.air_ticket_revenues =
+                    money(
+                        next.air_ticket_revenues +
+                        revenueDelta
+                    );
+
+                next.air_ticket_sell =
+                    money(
+                        next.air_ticket_sell +
+                        sellDelta
+                    );
             }
 
-            // Remove this voucher's old due entry first, so edit/payment can
-            // never create duplicate due records.
+
+            /*
+             * =========================================================
+             * REMOVE OLD DUE
+             * =========================================================
+             *
+             * Same voucher edit/payment-এর সময় duplicate due
+             * তৈরি হবে না।
+             */
             next.due_list = next.due_list
                 .map((group) => ({
                     ...group,
-                    due_data: Array.isArray(group?.due_data)
-                        ? group.due_data.filter((item) => String(item?.reference || '') !== reference)
+
+                    due_data: Array.isArray(
+                        group?.due_data
+                    )
+                        ? group.due_data.filter(
+                            (item) =>
+                                String(
+                                    item?.reference || ''
+                                ) !== reference
+                        )
                         : [],
                 }))
-                .filter((group) => Array.isArray(group?.due_data) && group.due_data.length);
+                .filter(
+                    (group) =>
+                        Array.isArray(
+                            group?.due_data
+                        ) &&
+                        group.due_data.length
+                );
 
-            if (newVoucher && newTotals.due > 0) {
-                let group = next.due_list.find((item) => getDateOnly(item?.date) === voucherDate);
+
+            /*
+             * =========================================================
+             * ADD NEW DUE
+             * =========================================================
+             */
+            if (
+                newVoucher &&
+                newTotals.due > 0
+            ) {
+                let group =
+                    next.due_list.find(
+                        (item) =>
+                            getDateOnly(
+                                item?.date
+                            ) === voucherDate
+                    );
+
                 if (!group) {
-                    group = { date: voucherDate, due_data: [] };
+                    group = {
+                        date: voucherDate,
+                        due_data: [],
+                    };
+
                     next.due_list.push(group);
                 }
-                group.due_data.push({ reference, amount: newTotals.due });
-            }
 
-            // Remove the voucher's previous discount and write the new total.
-            // Discount is NEVER included inside revenue.
-            next.discount = next.discount.filter(
-                (item) => String(item?.reference || '') !== reference
-            );
-            if (newVoucher && newTotals.discount > 0) {
-                next.discount.push({
-                    date: voucherDate,
+                group.due_data.push({
                     reference,
-                    amount: newTotals.discount,
+                    amount: newTotals.due,
                 });
             }
 
-            // Update the matching historical/current summary row.
-            // For today's voucher, the summary must mirror today's active
-            // air_ticket_revenues. For historical payment/edit operations,
-            // only the historical row is changed.
-            const summaryInfo = airTicketSummaryRow(next.summary, voucherDate);
-            const existingRow = summaryInfo.row || {};
-            const existingAirRevenue = money(existingRow.air_ticket_revenues);
+
+            /*
+             * =========================================================
+             * REMOVE OLD DISCOUNT
+             * =========================================================
+             *
+             * Discount revenue-এর ভিতরে যাবে না।
+             */
+            next.discount =
+                next.discount.filter(
+                    (item) =>
+                        String(
+                            item?.reference || ''
+                        ) !== reference
+                );
+
+
+            /*
+             * =========================================================
+             * ADD NEW DISCOUNT
+             * =========================================================
+             */
+            if (
+                newVoucher &&
+                newTotals.discount > 0
+            ) {
+                next.discount.push({
+                    date: voucherDate,
+
+                    reference,
+
+                    amount:
+                        newTotals.discount,
+                });
+            }
+
+
+            /*
+             * =========================================================
+             * UPDATE SUMMARY
+             * =========================================================
+             */
+            const summaryInfo =
+                airTicketSummaryRow(
+                    next.summary,
+                    voucherDate
+                );
+
+            const existingRow =
+                summaryInfo.row || {};
+
+            const existingAirRevenue =
+                money(
+                    existingRow.air_ticket_revenues
+                );
+
+            const existingAirTicketSell =
+                money(
+                    existingRow.air_ticket_sell
+                );
 
             let summaryAirRevenue;
+
+            let summaryAirTicketSell;
+
+
+            /*
+             * Today's summary should exactly match
+             * today's current transaction values.
+             */
             if (voucherDate === today) {
-                summaryAirRevenue = next.air_ticket_revenues;
+                summaryAirRevenue =
+                    next.air_ticket_revenues;
+
+                summaryAirTicketSell =
+                    next.air_ticket_sell;
             } else {
-                summaryAirRevenue = money(existingAirRevenue + revenueDelta);
+                /*
+                 * Historical date হলে delta দিয়ে update হবে।
+                 */
+                summaryAirRevenue =
+                    money(
+                        existingAirRevenue +
+                        revenueDelta
+                    );
+
+                summaryAirTicketSell =
+                    money(
+                        existingAirTicketSell +
+                        sellDelta
+                    );
             }
 
-            next.summary[summaryInfo.index] = {
+
+            /*
+             * Save summary row.
+             */
+            next.summary[
+                summaryInfo.index
+            ] = {
                 ...existingRow,
-                date: summaryInfo.target,
-                air_ticket_revenues: summaryAirRevenue,
-                due: sumDueForDate(next.due_list, summaryInfo.target),
-                discount: next.discount.filter(
-                    (item) => getDateOnly(item?.date) === summaryInfo.target
-                ),
+
+                date:
+                    summaryInfo.target,
+
+                /*
+                 * Business profit/revenue.
+                 */
+                air_ticket_revenues:
+                    summaryAirRevenue,
+
+                /*
+                 * Total Air Ticket Sale
+                 * after discount.
+                 */
+                air_ticket_sell:
+                    summaryAirTicketSell,
+
+                /*
+                 * Total due for this date.
+                 */
+                due:
+                    sumDueForDate(
+                        next.due_list,
+                        summaryInfo.target
+                    ),
+
+                /*
+                 * Discount list for this date.
+                 */
+                discount:
+                    next.discount.filter(
+                        (item) =>
+                            getDateOnly(
+                                item?.date
+                            ) ===
+                            summaryInfo.target
+                    ),
             };
 
-            const result = await dailyTransactionsCollection.updateOne(
-                { _id: daily._id },
-                {
-                    $set: {
-                        air_ticket_revenues: next.air_ticket_revenues,
-                        due_list: next.due_list,
-                        discount: next.discount,
-                        summary: next.summary,
+
+            /*
+             * =========================================================
+             * UPDATE MONGODB
+             * =========================================================
+             */
+            const result =
+                await dailyTransactionsCollection.updateOne(
+                    {
+                        _id: daily._id,
                     },
-                }
-            );
+                    {
+                        $set: {
+                            air_ticket_revenues:
+                                next.air_ticket_revenues,
+
+                            /*
+                             * IMPORTANT:
+                             * Ticket Price - Discount goes here.
+                             */
+                            air_ticket_sell:
+                                next.air_ticket_sell,
+
+                            due_list:
+                                next.due_list,
+
+                            discount:
+                                next.discount,
+
+                            summary:
+                                next.summary,
+                        },
+                    }
+                );
+
 
             if (!result.acknowledged) {
-                throw new Error('Daily Transactions update was not acknowledged.');
+                throw new Error(
+                    'Daily Transactions update was not acknowledged.'
+                );
             }
 
-            return { daily: next, result };
+            return {
+                daily: next,
+                result,
+            };
         };
+
 
         /* =========================================================
            AIR TICKET CLIENT CORNER
         ========================================================= */
 
-        app.get('/air_ticket_client_corner', async (req, res) => {
-            try {
-                const result = await airTicketClientCornerCollection.find().toArray();
-                res.send(result);
-            } catch (err) {
-                console.error('air_ticket_client_corner error:', err);
-                res.status(500).send({ error: 'Internal server error', details: err.message });
-            }
-        });
 
-        app.get('/air_ticket_client_details/:id', async (req, res) => {
-            try {
-                const id = req.params.id;
-                if (!ObjectId.isValid(id)) return res.status(400).send({ error: 'Invalid client id' });
-                const result = await airTicketClientCornerCollection.findOne({ _id: new ObjectId(id) });
-                if (!result) return res.status(404).send({ error: 'Client not found' });
-                res.send(result);
-            } catch (err) {
-                res.status(500).send({ error: 'Internal server error', details: err.message });
-            }
-        });
+        /*
+         * =========================================================
+         * GET ALL AIR TICKET CLIENTS
+         * =========================================================
+         */
+        app.get(
+            '/air_ticket_client_corner',
+            async (req, res) => {
+                try {
+                    const result =
+                        await airTicketClientCornerCollection
+                            .find()
+                            .toArray();
 
-        app.delete('/air_ticket_client/:id', async (req, res) => {
-            try {
-                const id = req.params.id;
-                if (!ObjectId.isValid(id)) return res.status(400).send({ error: 'Invalid client id' });
-                const result = await airTicketClientCornerCollection.deleteOne({ _id: new ObjectId(id) });
-                res.send(result);
-            } catch (err) {
-                res.status(500).send({ error: 'Internal server error', details: err.message });
-            }
-        });
+                    res.send(result);
+                } catch (err) {
+                    console.error(
+                        'air_ticket_client_corner error:',
+                        err
+                    );
 
-        app.post('/air_ticket_new_client', async (req, res) => {
-            try {
-                const data = req.body || {};
-                const voucherInput = Array.isArray(data.vouchers) ? data.vouchers[0] : null;
-                if (!data.name || !voucherInput) {
-                    return res.status(400).send({ success: false, error: 'Client name and voucher are required' });
+                    res.status(500).send({
+                        error:
+                            'Internal server error',
+
+                        details:
+                            err.message,
+                    });
                 }
-
-                const daily = await ensureToday();
-                const today = getDateOnly(daily.date);
-                const voucherDate = getDateOnly(voucherInput.date) || today;
-                if (voucherDate !== today) {
-                    return res.status(409).send({ success: false, error: 'Voucher date must be today.' });
-                }
-
-                const totals = airTicketTotals(voucherInput);
-                if (!totals.services.length) return res.status(400).send({ success: false, error: 'At least one service is required' });
-                if (totals.services.some(service => service.ticket_price <= 0 || service.ticket_agent_price < 0)) {
-                    return res.status(400).send({ success: false, error: 'Invalid service price' });
-                }
-                if (totals.discount < 0 || totals.discount > totals.ticketPrice) return res.status(400).send({ success: false, error: 'Invalid discount' });
-                if (totals.paid < 0 || totals.paid > money(totals.ticketPrice - totals.discount)) return res.status(400).send({ success: false, error: 'Invalid paid amount' });
-
-                const voucher = {
-                    ...voucherInput,
-                    date: voucherInput.date || `${today}, ${new Date().toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit', hour12: true })}`,
-                    voucher_no: String(voucherInput.voucher_no),
-                    services: totals.services,
-                    ticket_price: totals.ticketPrice,
-                    ticket_agent_price: totals.agentPrice,
-                    paid_amount: totals.paid,
-                    discount: totals.discount,
-                    due_amount: totals.due,
-                    payment_status: totals.due > 0 ? 'Unpaid' : 'Paid',
-                };
-
-                const clientData = { ...data, vouchers: [voucher] };
-                const result = await airTicketClientCornerCollection.insertOne(clientData);
-                if (!result.acknowledged) return res.status(500).send({ success: false, error: 'Client creation failed' });
-
-                const dailySync = await syncAirTicketDaily({ daily, newVoucher: voucher });
-                const dailyResult = dailySync.result;
-
-                res.send({ success: true, acknowledged: true, client_id: result.insertedId, voucher, dailyResult });
-            } catch (err) {
-                console.error('air_ticket_new_client error:', err);
-                res.status(500).send({ success: false, error: 'Insert failed', details: err.message });
             }
-        });
+        );
 
-        app.put('/air_ticket_new_voucher/:id', async (req, res) => {
-            try {
-                const id = req.params.id;
-                if (!ObjectId.isValid(id)) return res.status(400).send({ success: false, error: 'Invalid client id' });
-                const clientFilter = { _id: new ObjectId(id) };
-                const client = await airTicketClientCornerCollection.findOne(clientFilter);
-                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
 
-                const data = req.body || {};
-                const daily = await ensureToday();
-                const today = getDateOnly(daily.date);
-                if (getDateOnly(data.date) !== today) return res.status(409).send({ success: false, error: 'Voucher date must be today.' });
+        /*
+         * =========================================================
+         * GET AIR TICKET CLIENT DETAILS
+         * =========================================================
+         */
+        app.get(
+            '/air_ticket_client_details/:id',
+            async (req, res) => {
+                try {
+                    const id = req.params.id;
 
-                const voucherNo = String(data.voucher_no || '').trim();
-                if (!voucherNo) return res.status(400).send({ success: false, error: 'Voucher number is required' });
-                if ((client.vouchers || []).some(v => String(v?.voucher_no) === voucherNo)) return res.status(409).send({ success: false, error: 'Voucher number already exists for this client.' });
+                    if (
+                        !ObjectId.isValid(id)
+                    ) {
+                        return res.status(400).send({
+                            error:
+                                'Invalid client id',
+                        });
+                    }
 
-                const totals = airTicketTotals(data);
-                if (!totals.services.length) return res.status(400).send({ success: false, error: 'At least one service is required' });
-                if (totals.services.some(service => service.ticket_price <= 0 || service.ticket_agent_price < 0)) return res.status(400).send({ success: false, error: 'Invalid service price' });
-                if (totals.discount < 0 || totals.discount > totals.ticketPrice) return res.status(400).send({ success: false, error: 'Invalid discount' });
-                if (totals.paid < 0 || totals.paid > money(totals.ticketPrice - totals.discount)) return res.status(400).send({ success: false, error: 'Invalid paid amount' });
+                    const result =
+                        await airTicketClientCornerCollection.findOne(
+                            {
+                                _id:
+                                    new ObjectId(id),
+                            }
+                        );
 
-                const voucher = {
-                    ...data,
-                    date: data.date,
-                    voucher_no: voucherNo,
-                    services: totals.services,
-                    ticket_price: totals.ticketPrice,
-                    ticket_agent_price: totals.agentPrice,
-                    paid_amount: totals.paid,
-                    discount: totals.discount,
-                    due_amount: totals.due,
-                    payment_status: totals.due > 0 ? 'Unpaid' : 'Paid',
-                };
+                    if (!result) {
+                        return res.status(404).send({
+                            error:
+                                'Client not found',
+                        });
+                    }
 
-                const vouchers = Array.isArray(client.vouchers) ? clone(client.vouchers) : [];
-                if (vouchers.length >= 10) vouchers.shift();
-                vouchers.push(voucher);
+                    res.send(result);
+                } catch (err) {
+                    res.status(500).send({
+                        error:
+                            'Internal server error',
 
-                const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
-                if (totals.paid > 0) {
-                    if (transections.length >= 15) transections.shift();
-                    transections.push({ date: voucher.date, reference_voucher: voucherNo, paid_amount: totals.paid, transection_amount: totals.paid, due_amount: totals.due, payment_status: voucher.payment_status });
+                        details:
+                            err.message,
+                    });
                 }
-
-                const dailySync = await syncAirTicketDaily({ daily, newVoucher: voucher });
-                const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
-                const dailyResult = dailySync.result;
-
-                res.send({ success: clientResult.acknowledged && dailyResult.acknowledged, acknowledged: clientResult.acknowledged, voucher, dailyResult });
-            } catch (err) {
-                console.error('air_ticket_new_voucher error:', err);
-                res.status(500).send({ success: false, error: 'Voucher creation failed', details: err.message });
             }
-        });
+        );
+
+
+        /*
+         * =========================================================
+         * DELETE AIR TICKET CLIENT
+         * =========================================================
+         */
+        app.delete(
+            '/air_ticket_client/:id',
+            async (req, res) => {
+                try {
+                    const id = req.params.id;
+
+                    if (
+                        !ObjectId.isValid(id)
+                    ) {
+                        return res.status(400).send({
+                            error:
+                                'Invalid client id',
+                        });
+                    }
+
+                    const result =
+                        await airTicketClientCornerCollection.deleteOne(
+                            {
+                                _id:
+                                    new ObjectId(id),
+                            }
+                        );
+
+                    res.send(result);
+                } catch (err) {
+                    res.status(500).send({
+                        error:
+                            'Internal server error',
+
+                        details:
+                            err.message,
+                    });
+                }
+            }
+        );
+
+
+        /*
+         * =========================================================
+         * CREATE NEW AIR TICKET CLIENT
+         * =========================================================
+         */
+        app.post(
+            '/air_ticket_new_client',
+            async (req, res) => {
+                try {
+                    const data =
+                        req.body || {};
+
+                    const voucherInput =
+                        Array.isArray(
+                            data.vouchers
+                        )
+                            ? data.vouchers[0]
+                            : null;
+
+
+                    if (
+                        !data.name ||
+                        !voucherInput
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Client name and voucher are required',
+                        });
+                    }
+
+
+                    /*
+                     * Get today's Daily Transaction.
+                     */
+                    const daily =
+                        await ensureToday();
+
+                    const today =
+                        getDateOnly(
+                            daily.date
+                        );
+
+
+                    const voucherDate =
+                        getDateOnly(
+                            voucherInput.date
+                        ) || today;
+
+
+                    /*
+                     * Only today's voucher is allowed.
+                     */
+                    if (
+                        voucherDate !== today
+                    ) {
+                        return res.status(409).send({
+                            success: false,
+
+                            error:
+                                'Voucher date must be today.',
+                        });
+                    }
+
+
+                    /*
+                     * Calculate Air Ticket totals.
+                     */
+                    const totals =
+                        airTicketTotals(
+                            voucherInput
+                        );
+
+
+                    if (
+                        !totals.services.length
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'At least one service is required',
+                        });
+                    }
+
+
+                    /*
+                     * Validate service prices.
+                     */
+                    if (
+                        totals.services.some(
+                            (service) =>
+                                service.ticket_price <= 0 ||
+                                service.ticket_agent_price < 0
+                        )
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid service price',
+                        });
+                    }
+
+
+                    /*
+                     * Validate discount.
+                     */
+                    if (
+                        totals.discount < 0 ||
+                        totals.discount >
+                        totals.ticketPrice
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid discount',
+                        });
+                    }
+
+
+                    /*
+                     * Validate paid amount.
+                     */
+                    if (
+                        totals.paid < 0 ||
+                        totals.paid >
+                        money(
+                            totals.ticketPrice -
+                            totals.discount
+                        )
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid paid amount',
+                        });
+                    }
+
+
+                    /*
+                     * Create normalized voucher.
+                     */
+                    const voucher = {
+                        ...voucherInput,
+
+                        date:
+                            voucherInput.date ||
+                            `${today}, ${new Date().toLocaleTimeString(
+                                'en-BD',
+                                {
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    hour12: true,
+                                }
+                            )}`,
+
+                        voucher_no:
+                            String(
+                                voucherInput.voucher_no
+                            ),
+
+                        services:
+                            totals.services,
+
+                        /*
+                         * Total Ticket Price.
+                         */
+                        ticket_price:
+                            totals.ticketPrice,
+
+                        /*
+                         * Total Agent Price.
+                         */
+                        ticket_agent_price:
+                            totals.agentPrice,
+
+                        /*
+                         * Paid amount.
+                         */
+                        paid_amount:
+                            totals.paid,
+
+                        /*
+                         * Discount.
+                         */
+                        discount:
+                            totals.discount,
+
+                        /*
+                         * Customer due.
+                         */
+                        due_amount:
+                            totals.due,
+
+                        payment_status:
+                            totals.due > 0
+                                ? 'Unpaid'
+                                : 'Paid',
+                    };
+
+
+                    /*
+                     * Create client document.
+                     */
+                    const clientData = {
+                        ...data,
+
+                        vouchers: [
+                            voucher,
+                        ],
+                    };
+
+
+                    const result =
+                        await airTicketClientCornerCollection.insertOne(
+                            clientData
+                        );
+
+
+                    if (
+                        !result.acknowledged
+                    ) {
+                        return res.status(500).send({
+                            success: false,
+
+                            error:
+                                'Client creation failed',
+                        });
+                    }
+
+
+                    /*
+                     * IMPORTANT:
+                     *
+                     * Here:
+                     *
+                     * air_ticket_sell =
+                     * ticket_price - discount
+                     *
+                     * Example:
+                     *
+                     * ticket_price = 10000
+                     * agent_price  = 7500
+                     * discount     = 200
+                     *
+                     * air_ticket_sell     = 9800
+                     * air_ticket_revenues = 2300
+                     */
+                    const dailySync =
+                        await syncAirTicketDaily({
+                            daily,
+
+                            newVoucher:
+                                voucher,
+                        });
+
+
+                    const dailyResult =
+                        dailySync.result;
+
+
+                    res.send({
+                        success: true,
+
+                        acknowledged: true,
+
+                        client_id:
+                            result.insertedId,
+
+                        voucher,
+
+                        dailyResult,
+                    });
+                } catch (err) {
+                    console.error(
+                        'air_ticket_new_client error:',
+                        err
+                    );
+
+                    res.status(500).send({
+                        success: false,
+
+                        error:
+                            'Insert failed',
+
+                        details:
+                            err.message,
+                    });
+                }
+            }
+        );
+
+
+        /*
+         * =========================================================
+         * ADD NEW AIR TICKET VOUCHER TO EXISTING CLIENT
+         * =========================================================
+         */
+        app.put(
+            '/air_ticket_new_voucher/:id',
+            async (req, res) => {
+                try {
+                    const id =
+                        req.params.id;
+
+
+                    /*
+                     * Validate client ID.
+                     */
+                    if (
+                        !ObjectId.isValid(id)
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid client id',
+                        });
+                    }
+
+
+                    const clientFilter = {
+                        _id:
+                            new ObjectId(id),
+                    };
+
+
+                    /*
+                     * Find client.
+                     */
+                    const client =
+                        await airTicketClientCornerCollection.findOne(
+                            clientFilter
+                        );
+
+
+                    if (!client) {
+                        return res.status(404).send({
+                            success: false,
+
+                            error:
+                                'Client not found',
+                        });
+                    }
+
+
+                    const data =
+                        req.body || {};
+
+
+                    /*
+                     * Get today's Daily Transaction.
+                     */
+                    const daily =
+                        await ensureToday();
+
+                    const today =
+                        getDateOnly(
+                            daily.date
+                        );
+
+
+                    /*
+                     * Only today's voucher is allowed.
+                     */
+                    if (
+                        getDateOnly(
+                            data.date
+                        ) !== today
+                    ) {
+                        return res.status(409).send({
+                            success: false,
+
+                            error:
+                                'Voucher date must be today.',
+                        });
+                    }
+
+
+                    /*
+                     * Validate voucher number.
+                     */
+                    const voucherNo =
+                        String(
+                            data.voucher_no || ''
+                        ).trim();
+
+
+                    if (!voucherNo) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Voucher number is required',
+                        });
+                    }
+
+
+                    /*
+                     * Prevent duplicate voucher number
+                     * for same client.
+                     */
+                    if (
+                        (client.vouchers || [])
+                            .some(
+                                (v) =>
+                                    String(
+                                        v?.voucher_no
+                                    ) === voucherNo
+                            )
+                    ) {
+                        return res.status(409).send({
+                            success: false,
+
+                            error:
+                                'Voucher number already exists for this client.',
+                        });
+                    }
+
+
+                    /*
+                     * Calculate totals.
+                     */
+                    const totals =
+                        airTicketTotals(
+                            data
+                        );
+
+
+                    if (
+                        !totals.services.length
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'At least one service is required',
+                        });
+                    }
+
+
+                    /*
+                     * Validate service prices.
+                     */
+                    if (
+                        totals.services.some(
+                            (service) =>
+                                service.ticket_price <= 0 ||
+                                service.ticket_agent_price < 0
+                        )
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid service price',
+                        });
+                    }
+
+
+                    /*
+                     * Validate discount.
+                     */
+                    if (
+                        totals.discount < 0 ||
+                        totals.discount >
+                        totals.ticketPrice
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid discount',
+                        });
+                    }
+
+
+                    /*
+                     * Validate paid amount.
+                     */
+                    if (
+                        totals.paid < 0 ||
+                        totals.paid >
+                        money(
+                            totals.ticketPrice -
+                            totals.discount
+                        )
+                    ) {
+                        return res.status(400).send({
+                            success: false,
+
+                            error:
+                                'Invalid paid amount',
+                        });
+                    }
+
+
+                    /*
+                     * Create normalized voucher.
+                     */
+                    const voucher = {
+                        ...data,
+
+                        date:
+                            data.date,
+
+                        voucher_no:
+                            voucherNo,
+
+                        services:
+                            totals.services,
+
+                        ticket_price:
+                            totals.ticketPrice,
+
+                        ticket_agent_price:
+                            totals.agentPrice,
+
+                        paid_amount:
+                            totals.paid,
+
+                        discount:
+                            totals.discount,
+
+                        due_amount:
+                            totals.due,
+
+                        payment_status:
+                            totals.due > 0
+                                ? 'Unpaid'
+                                : 'Paid',
+                    };
+
+
+                    /*
+                     * Existing vouchers.
+                     */
+                    const vouchers =
+                        Array.isArray(
+                            client.vouchers
+                        )
+                            ? clone(
+                                client.vouchers
+                            )
+                            : [];
+
+
+                    /*
+                     * Keep maximum 10 vouchers.
+                     */
+                    if (
+                        vouchers.length >= 10
+                    ) {
+                        vouchers.shift();
+                    }
+
+
+                    vouchers.push(
+                        voucher
+                    );
+
+
+                    /*
+                     * Existing transactions.
+                     */
+                    const transections =
+                        Array.isArray(
+                            client.transections
+                        )
+                            ? clone(
+                                client.transections
+                            )
+                            : [];
+
+
+                    /*
+                     * Save payment transaction
+                     * when paid amount > 0.
+                     */
+                    if (
+                        totals.paid > 0
+                    ) {
+                        if (
+                            transections.length >=
+                            15
+                        ) {
+                            transections.shift();
+                        }
+
+                        transections.push({
+                            date:
+                                voucher.date,
+
+                            reference_voucher:
+                                voucherNo,
+
+                            paid_amount:
+                                totals.paid,
+
+                            transection_amount:
+                                totals.paid,
+
+                            due_amount:
+                                totals.due,
+
+                            payment_status:
+                                voucher.payment_status,
+                        });
+                    }
+
+
+                    /*
+                     * IMPORTANT:
+                     *
+                     * syncAirTicketDaily() will update:
+                     *
+                     * daily.air_ticket_sell
+                     *
+                     * with:
+                     *
+                     * ticket_price - discount
+                     */
+                    const dailySync =
+                        await syncAirTicketDaily({
+                            daily,
+
+                            newVoucher:
+                                voucher,
+                        });
+
+
+                    /*
+                     * Update client.
+                     */
+                    const clientResult =
+                        await airTicketClientCornerCollection.updateOne(
+                            clientFilter,
+
+                            {
+                                $set: {
+                                    vouchers,
+
+                                    transections,
+                                },
+                            }
+                        );
+
+
+                    const dailyResult =
+                        dailySync.result;
+
+
+                    res.send({
+                        success:
+                            clientResult.acknowledged &&
+                            dailyResult.acknowledged,
+
+                        acknowledged:
+                            clientResult.acknowledged,
+
+                        voucher,
+
+                        dailyResult,
+                    });
+                } catch (err) {
+                    console.error(
+                        'air_ticket_new_voucher error:',
+                        err
+                    );
+
+                    res.status(500).send({
+                        success: false,
+
+                        error:
+                            'Voucher creation failed',
+
+                        details:
+                            err.message,
+                    });
+                }
+            }
+        );
 
         app.put('/air_ticket_take_payment/:id', async (req, res) => {
             try {
