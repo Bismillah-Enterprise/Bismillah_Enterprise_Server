@@ -533,6 +533,57 @@ async function run() {
             }
         });
 
+        app.put('/closing_month/:id', async (req, res) => {
+            const id = req.params.id;
+            const bodyData = req.body;
+            const filter = { _id: new ObjectId(id) };
+
+            const newIncomeHistory = {
+                month_name: bodyData.month_name,
+                total_worked_time: `${bodyData.total_working_hour} Hour, ${bodyData.total_working_minute} Minute`,
+                previous_due: bodyData.last_month_due,
+                total_income: bodyData.total_income,
+                paid_amount: bodyData.paid_amount,
+                receiveable_amount: bodyData.last_month_due,
+                paid_date: bodyData.paid_date,
+            };
+
+            try {
+                const staff = await staffsCollection.findOne(filter);
+
+                // Step 1: If length > 19, remove first transection
+                if (staff?.income_history?.length > 12) {
+                    await staffsCollection.updateOne(filter, { $pop: { income_history: -1 } }); // remove first
+                }
+
+                // Step 2: Push new transection + update balances
+                const updateDoc = {
+                    $push: {
+                        income_history: newIncomeHistory
+                    },
+                    $set: {
+                        total_income: 0,
+                        bonus: 0,
+                        fine: 0,
+                        total_working_hour: 0,
+                        total_working_minute: 0,
+                        withdrawal_amount: 0,
+                        available_balance: bodyData.last_month_due,
+                        last_month_due: bodyData.last_month_due,
+                        current_month_details: [],
+                        current_working_month: bodyData.current_working_month
+                    }
+                };
+
+                const result = await staffsCollection.updateOne(filter, updateDoc);
+                res.send(result);
+
+            } catch (err) {
+                console.error(err);
+                res.status(500).send({ error: 'Update failed', details: err.message });
+            }
+        });
+
 
         // ✅ POST update/insert shop location
         app.post('/shop_location', async (req, res) => {
