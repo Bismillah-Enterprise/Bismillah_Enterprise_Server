@@ -1268,6 +1268,7 @@ async function run() {
             stationary_revenues: 0,
             photocopy_revenues: 0,
             air_ticket_revenues: 0,
+            air_ticket_sell: 0,
             due_list: [],
             discount: [],
             others_revenues: [],
@@ -1323,6 +1324,7 @@ async function run() {
                     stationary_revenues: money(daily.stationary_revenues),
                     photocopy_revenues: money(daily.photocopy_revenues),
                     air_ticket_revenues: money(daily.air_ticket_revenues),
+                    air_ticket_sell: money(daily.air_ticket_sell),
                     others_revenues: Array.isArray(daily.others_revenues) ? clone(daily.others_revenues) : [],
                     due: sumDueForDate(daily.due_list, target),
                     discount: Array.isArray(daily.discount)
@@ -1348,6 +1350,7 @@ async function run() {
                 stationary_revenues: money(daily.stationary_revenues),
                 photocopy_revenues: money(daily.photocopy_revenues),
                 air_ticket_revenues: money(daily.air_ticket_revenues),
+                air_ticket_sell: money(daily.air_ticket_sell),
                 others_revenues: Array.isArray(daily.others_revenues) ? clone(daily.others_revenues) : [],
                 due: sumDueForDate(daily.due_list, target),
                 discount: Array.isArray(daily.discount)
@@ -1382,6 +1385,7 @@ async function run() {
                 stationary_revenues: money(daily.stationary_revenues),
                 photocopy_revenues: money(daily.photocopy_revenues),
                 air_ticket_revenues: money(daily.air_ticket_revenues),
+                air_ticket_sell: money(daily.air_ticket_sell),
                 others_revenues: Array.isArray(daily.others_revenues) ? clone(daily.others_revenues) : [],
                 due: sumDueForDate(daily.due_list, oldDate),
                 discount: Array.isArray(daily.discount)
@@ -1403,6 +1407,7 @@ async function run() {
                         stationary_revenues: 0,
                         photocopy_revenues: 0,
                         air_ticket_revenues: 0,
+                        air_ticket_sell: 0,
                         others_revenues: [],
                         expenses: [],
                         discount: [],
@@ -2184,6 +2189,7 @@ async function run() {
                 const stationary = money(daily.stationary_revenues);
                 const photocopy = money(daily.photocopy_revenues);
                 const airTicket = money(daily.air_ticket_revenues);
+                const airTicketSell = money(daily.air_ticket_sell);
                 const others = Array.isArray(daily.others_revenues)
                     ? money(daily.others_revenues.reduce((sum, item) => sum + money(item?.amount), 0))
                     : 0;
@@ -2213,6 +2219,7 @@ async function run() {
                     stationary_revenues: stationary,
                     photocopy_revenues: photocopy,
                     air_ticket_revenues: airTicket,
+                    air_ticket_sell: airTicketSell,
                     others_revenues: others,
                     due,
                     discount,
@@ -2231,6 +2238,7 @@ async function run() {
                             stationary_revenues: 0,
                             photocopy_revenues: 0,
                             air_ticket_revenues: 0,
+                            air_ticket_sell: 0,
                             others_revenues: [],
                             expenses: [],
                             discount: [],
@@ -3212,6 +3220,7 @@ async function run() {
             daily,
             oldVoucher = null,
             newVoucher = null,
+            sellDeltaOverride = null,
         }) => {
             const currentDaily = clone(daily);
 
@@ -3328,16 +3337,18 @@ async function run() {
              *
              * Delta = +4,700
              */
-            const sellDelta = money(
-                (
-                    newTotals.ticketPrice -
-                    newTotals.discount
-                ) -
-                (
-                    oldTotals.ticketPrice -
-                    oldTotals.discount
-                )
-            );
+            const sellDelta = sellDeltaOverride !== null
+                ? money(sellDeltaOverride)
+                : money(
+                    (
+                        newTotals.ticketPrice -
+                        newTotals.discount
+                    ) -
+                    (
+                        oldTotals.ticketPrice -
+                        oldTotals.discount
+                    )
+                );
 
 
             /*
@@ -4475,7 +4486,12 @@ async function run() {
                 }
 
                 const daily = await ensureToday();
-                const dailySync = await syncAirTicketDaily({ daily, oldVoucher, newVoucher: updatedVoucher });
+                const dailySync = await syncAirTicketDaily({
+                    daily,
+                    oldVoucher,
+                    newVoucher: updatedVoucher,
+                    sellDeltaOverride: -additionalDiscount,
+                });
                 const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
                 const dailyResult = dailySync.result;
 
