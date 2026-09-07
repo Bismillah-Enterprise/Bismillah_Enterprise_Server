@@ -1480,6 +1480,7 @@ async function run() {
                 const paid = money(req.body?.paid_amount);
                 const reference = String(req.body?.reference || '').trim();
                 const comment = String(req.body?.comment || '').trim();
+                const time = String(req.body?.time || '');
 
                 if (!['computer', 'stationary', 'photocopy', 'others'].includes(category))
                     return res.status(400).send({ error: 'Invalid revenue category.' });
@@ -1521,6 +1522,7 @@ async function run() {
                             due_list: dailyUpdate.due_list,
                             discount: dailyUpdate.discount,
                             summary: dailyUpdate.summary,
+                            last_revenue_transaction: { category, amount, paid, comment, time },
                         }
                     }
                 );
@@ -1539,6 +1541,7 @@ async function run() {
             try {
                 const amount = money(req.body?.amount);
                 const comment = String(req.body?.comment || '').trim();
+                const time = String(req.body?.time || '');
                 if (amount <= 0) return res.status(400).send({ error: 'Expense amount must be greater than 0.' });
                 if (!comment) return res.status(400).send({ error: 'Expense description is required.' });
 
@@ -1547,13 +1550,14 @@ async function run() {
                 expenses.push({ amount, comment });
 
                 const summary = Array.isArray(daily.summary) ? clone(daily.summary) : [];
+                const last_expense_transaction = { amount, comment, time };
                 const dailyCopy = clone(daily);
                 dailyCopy.expenses = expenses;
                 refreshSummaryDate(summary, getDateOnly(daily.date), dailyCopy);
 
                 const result = await dailyTransactionsCollection.updateOne(
                     { _id: daily._id },
-                    { $set: { expenses, summary } }
+                    { $set: { expenses, summary, last_expense_transaction } }
                 );
                 res.send({ success: true, acknowledged: result.acknowledged, result });
             } catch (error) {
@@ -4440,65 +4444,206 @@ async function run() {
             }
         );
 
+        // app.put('/air_ticket_take_payment/:id', async (req, res) => {
+        //     try {
+        //         const id = req.params.id;
+        //         if (!ObjectId.isValid(id)) return res.status(400).send({ success: false, error: 'Invalid client id' });
+        //         const clientFilter = { _id: new ObjectId(id) };
+        //         const client = await airTicketClientCornerCollection.findOne(clientFilter);
+        //         if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
+
+        //         const voucherNo = String(req.body?.voucher_no || '');
+        //         const voucherIndex = (client.vouchers || []).findIndex(v => String(v?.voucher_no) === voucherNo);
+        //         if (voucherIndex < 0) return res.status(404).send({ success: false, error: 'Voucher not found' });
+
+        //         const oldVoucher = clone(client.vouchers[voucherIndex]);
+        //         const oldTotals = airTicketTotals(oldVoucher);
+        //         const payment = money(req.body?.transection_amount);
+        //         const additionalDiscount = money(req.body?.additional_discount ?? req.body?.more_discount ?? 0);
+        //         if (payment <= 0 && additionalDiscount <= 0) return res.status(400).send({ success: false, error: 'Payment or additional discount is required' });
+        //         if (payment + additionalDiscount > oldTotals.due) return res.status(400).send({ success: false, error: 'Payment plus discount cannot exceed current due' });
+
+        //         const updatedVoucher = {
+        //             ...oldVoucher,
+        //             paid_amount: money(oldTotals.paid + payment),
+        //             discount: money(oldTotals.discount + additionalDiscount),
+        //         };
+        //         const newTotals = airTicketTotals(updatedVoucher);
+        //         updatedVoucher.ticket_price = newTotals.ticketPrice;
+        //         updatedVoucher.ticket_agent_price = newTotals.agentPrice;
+        //         updatedVoucher.due_amount = newTotals.due;
+        //         updatedVoucher.payment_status = newTotals.due > 0 ? 'Unpaid' : 'Paid';
+
+        //         const vouchers = clone(client.vouchers);
+        //         vouchers[voucherIndex] = updatedVoucher;
+        //         const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
+        //         if (payment > 0) {
+        //             if (transections.length >= 15) transections.shift();
+        //             transections.push({
+        //                 date: req.body?.date || getTodayDateOnly(),
+        //                 reference_voucher: voucherNo,
+        //                 paid_amount: updatedVoucher.paid_amount,
+        //                 transection_amount: payment,
+        //                 due_amount: updatedVoucher.due_amount,
+        //                 payment_status: updatedVoucher.payment_status,
+        //             });
+        //         }
+
+        //         const daily = await ensureToday();
+        //         const dailySync = await syncAirTicketDaily({
+        //             daily,
+        //             oldVoucher,
+        //             newVoucher: updatedVoucher,
+        //             sellDeltaOverride: -additionalDiscount,
+        //         });
+        //         const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
+        //         const dailyResult = dailySync.result;
+
+        //         res.send({ success: clientResult.acknowledged && dailyResult.acknowledged, voucher: updatedVoucher, dailyResult });
+        //     } catch (err) {
+        //         console.error('air_ticket_take_payment error:', err);
+        //         res.status(500).send({ success: false, error: 'Payment update failed', details: err.message });
+        //     }
+        // });
+
         app.put('/air_ticket_take_payment/:id', async (req, res) => {
             try {
                 const id = req.params.id;
-                if (!ObjectId.isValid(id)) return res.status(400).send({ success: false, error: 'Invalid client id' });
-                const clientFilter = { _id: new ObjectId(id) };
-                const client = await airTicketClientCornerCollection.findOne(clientFilter);
-                if (!client) return res.status(404).send({ success: false, error: 'Client not found' });
+                const data = req.body || {};
 
-                const voucherNo = String(req.body?.voucher_no || '');
-                const voucherIndex = (client.vouchers || []).findIndex(v => String(v?.voucher_no) === voucherNo);
-                if (voucherIndex < 0) return res.status(404).send({ success: false, error: 'Voucher not found' });
-
-                const oldVoucher = clone(client.vouchers[voucherIndex]);
-                const oldTotals = airTicketTotals(oldVoucher);
-                const payment = money(req.body?.transection_amount);
-                const additionalDiscount = money(req.body?.additional_discount ?? req.body?.more_discount ?? 0);
-                if (payment <= 0 && additionalDiscount <= 0) return res.status(400).send({ success: false, error: 'Payment or additional discount is required' });
-                if (payment + additionalDiscount > oldTotals.due) return res.status(400).send({ success: false, error: 'Payment plus discount cannot exceed current due' });
-
-                const updatedVoucher = {
-                    ...oldVoucher,
-                    paid_amount: money(oldTotals.paid + payment),
-                    discount: money(oldTotals.discount + additionalDiscount),
-                };
-                const newTotals = airTicketTotals(updatedVoucher);
-                updatedVoucher.ticket_price = newTotals.ticketPrice;
-                updatedVoucher.ticket_agent_price = newTotals.agentPrice;
-                updatedVoucher.due_amount = newTotals.due;
-                updatedVoucher.payment_status = newTotals.due > 0 ? 'Unpaid' : 'Paid';
-
-                const vouchers = clone(client.vouchers);
-                vouchers[voucherIndex] = updatedVoucher;
-                const transections = Array.isArray(client.transections) ? clone(client.transections) : [];
-                if (payment > 0) {
-                    if (transections.length >= 15) transections.shift();
-                    transections.push({
-                        date: req.body?.date || getTodayDateOnly(),
-                        reference_voucher: voucherNo,
-                        paid_amount: updatedVoucher.paid_amount,
-                        transection_amount: payment,
-                        due_amount: updatedVoucher.due_amount,
-                        payment_status: updatedVoucher.payment_status,
+                if (!ObjectId.isValid(id)) {
+                    return res.status(400).send({
+                        success: false,
+                        error: 'Invalid client id'
                     });
                 }
 
-                const daily = await ensureToday();
-                const dailySync = await syncAirTicketDaily({
-                    daily,
-                    oldVoucher,
-                    newVoucher: updatedVoucher,
-                    sellDeltaOverride: -additionalDiscount,
-                });
-                const clientResult = await airTicketClientCornerCollection.updateOne(clientFilter, { $set: { vouchers, transections } });
-                const dailyResult = dailySync.result;
+                const clientFilter = { _id: new ObjectId(id) };
+                const client = await airTicketClientCornerCollection.findOne(
+                    clientFilter
+                );
 
-                res.send({ success: clientResult.acknowledged && dailyResult.acknowledged, voucher: updatedVoucher, dailyResult });
+                if (!client) {
+                    return res.status(404).send({
+                        success: false,
+                        error: 'Client not found'
+                    });
+                }
+
+                const voucherNo = String(data.voucher_no);
+                const voucherIndex = (client.vouchers || []).findIndex(
+                    voucher => String(voucher?.voucher_no) === voucherNo
+                );
+
+                if (voucherIndex === -1) {
+                    return res.status(404).send({
+                        success: false,
+                        error: 'Voucher not found'
+                    });
+                }
+
+                const oldVoucher = clone(client.vouchers[voucherIndex]);
+                const currentDue = money(oldVoucher.due_amount);
+                const currentPaid = money(oldVoucher.paid_amount);
+                const currentDiscount = money(oldVoucher.discount);
+
+                const payment = money(data.transection_amount);
+                const additionalDiscount = money(
+                    data.additional_discount ?? data.more_discount ?? 0
+                );
+
+                if (payment <= 0 && additionalDiscount <= 0) {
+                    return res.status(400).send({
+                        success: false,
+                        error: 'Payment or additional discount is required'
+                    });
+                }
+
+                if (payment + additionalDiscount > currentDue) {
+                    return res.status(400).send({
+                        success: false,
+                        error: 'Payment plus discount cannot exceed current due'
+                    });
+                }
+
+                const newPaid = money(currentPaid + payment);
+                const newDiscount = money(
+                    currentDiscount + additionalDiscount
+                );
+                const newDue = money(
+                    Math.max(0, currentDue - payment - additionalDiscount)
+                );
+                const newStatus = newDue > 0 ? 'Unpaid' : 'Paid';
+
+                const updatedVoucher = {
+                    ...oldVoucher,
+                    paid_amount: newPaid,
+                    discount: newDiscount,
+                    due_amount: newDue,
+                    payment_status: newStatus
+                };
+
+                const vouchers = clone(client.vouchers);
+                vouchers[voucherIndex] = updatedVoucher;
+
+                const transaction = {
+                    date:
+                        data.date ||
+                        new Date().toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }),
+                    reference_voucher: voucherNo,
+                    paid_amount: newPaid,
+                    transection_amount: payment,
+                    due_amount: newDue,
+                    payment_status: newStatus
+                };
+
+                let transections = Array.isArray(client.transections)
+                    ? clone(client.transections)
+                    : [];
+
+                if (transections.length > 15) {
+                    transections.shift();
+                }
+
+                transections.push(transaction);
+
+                const clientResult = await airTicketClientCornerCollection.updateOne(
+                    clientFilter,
+                    {
+                        $set: {
+                            vouchers,
+                            transections
+                        }
+                    }
+                );
+
+                if (!clientResult.acknowledged) {
+                    throw new Error('Air ticket client update failed');
+                }
+
+                const daily = await ensureToday();
+                const updatedDaily = await updateAirTicketDailySummary({
+                    daily,
+                    voucher: updatedVoucher,
+                    oldTicketPrice: oldVoucher.ticket_price,
+                    oldDiscount: oldVoucher.discount,
+                    oldDue: oldVoucher.due_amount
+                });
+
+                const dailyResult = await saveAirTicketDaily(updatedDaily);
+
+                res.send({
+                    success: true,
+                    voucher: updatedVoucher,
+                    dailyResult
+                });
             } catch (err) {
                 console.error('air_ticket_take_payment error:', err);
-                res.status(500).send({ success: false, error: 'Payment update failed', details: err.message });
+                res.status(500).send({
+                    success: false,
+                    error: 'Payment update failed',
+                    details: err.message
+                });
             }
         });
 
