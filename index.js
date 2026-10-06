@@ -1256,7 +1256,7 @@ async function run() {
             return match ? `${match[1]} ${match[2]}, ${match[3]}` : text.split(',')[0].trim();
         };
 
-        const getTodayDateOnly = () => new Date().toLocaleDateString('en-US', {
+        const getTodayDateOnly = () => new Date().toLocaleDateString('en-BD', {
             month: 'long',
             day: 'numeric',
             year: 'numeric',
@@ -1923,36 +1923,119 @@ async function run() {
         ========================================================= */
 
         app.patch('/daily_transactions/pay_due', async (req, res) => {
-            try {
-                const date = getDateOnly(req.body?.date);
-                const reference = String(req.body?.reference || '').trim();
-                const amount = money(req.body?.paid_amount ?? req.body?.amount);
-                if (!date || !reference || amount <= 0) return res.status(400).send({ error: 'Date, reference and valid payment amount are required.' });
+    try {
+        const date = getDateOnly(req.body?.date);
+        const reference = String(req.body?.reference || '').trim();
+        const amount = money(req.body?.paid_amount ?? req.body?.amount);
 
-                const daily = await ensureToday();
-                const nextDaily = clone(daily);
-                const group = nextDaily.due_list.find((g) => getDateOnly(g?.date) === date);
-                if (!group) return res.status(404).send({ error: 'Due date not found.' });
-                const index = group.due_data.findIndex((item) => String(item?.reference || '').trim() === reference);
-                if (index < 0) return res.status(404).send({ error: 'Due entry not found.' });
+        if (!date || !reference || amount <= 0) {
+            return res.status(400).send({
+                error: 'Date, reference and valid payment amount are required.'
+            });
+        }
 
-                const current = money(group.due_data[index].amount);
-                if (amount > current) return res.status(400).send({ error: `Payment cannot exceed current due of ${current}.` });
-                const remaining = money(current - amount);
-                if (remaining <= 0) group.due_data.splice(index, 1);
-                else group.due_data[index].amount = remaining;
-                nextDaily.due_list = nextDaily.due_list.filter((g) => Array.isArray(g?.due_data) && g.due_data.length);
-                refreshSummaryDate(nextDaily.summary, date, nextDaily);
+        const daily = await ensureToday();
+        const nextDaily = clone(daily);
 
-                const result = await dailyTransactionsCollection.updateOne(
-                    { _id: daily._id },
-                    { $set: { due_list: nextDaily.due_list, summary: nextDaily.summary } }
-                );
-                res.send({ success: true, acknowledged: result.acknowledged, remaining_due: remaining, result });
-            } catch (error) {
-                res.status(500).send({ error: 'Due payment failed', details: error.message });
+        const group = nextDaily.due_list.find(
+            (g) => getDateOnly(g?.date) === date
+        );
+
+        if (!group) {
+            return res.status(404).send({
+                error: 'Due date not found.'
+            });
+        }
+
+        const index = group.due_data.findIndex(
+            (item) =>
+                String(item?.reference || '').trim() === reference
+        );
+
+        if (index < 0) {
+            return res.status(404).send({
+                error: 'Due entry not found.'
+            });
+        }
+
+        const current = money(group.due_data[index].amount);
+
+        if (amount > current) {
+            return res.status(400).send({
+                error: `Payment cannot exceed current due of ${current}.`
+            });
+        }
+
+        // Calculate remaining due
+        const remaining = money(current - amount);
+
+        if (remaining <= 0) {
+            group.due_data.splice(index, 1);
+        } else {
+            group.due_data[index].amount = remaining;
+        }
+
+        // Remove empty due groups
+        nextDaily.due_list = nextDaily.due_list.filter(
+            (g) => Array.isArray(g?.due_data) && g.due_data.length > 0
+        );
+
+        // Update ONLY the due field for the selected date.
+        // Do not rebuild or overwrite any other summary fields.
+        const summaryIndex = nextDaily.summary.findIndex(
+            (item) => getDateOnly(item?.date) === date
+        );
+
+        if (summaryIndex >= 0) {
+            nextDaily.summary[summaryIndex].due = sumDueForDate(
+                nextDaily.due_list,
+                date
+            );
+        } else {
+            // If the summary for this date doesn't exist,
+            // create a minimal summary entry without today's revenue data.
+            nextDaily.summary.push({
+                date,
+                computer_revenues: 0,
+                stationary_revenues: 0,
+                photocopy_revenues: 0,
+                air_ticket_revenues: 0,
+                air_ticket_sell: 0,
+                others_revenues: [],
+                due: sumDueForDate(nextDaily.due_list, date),
+                discount: [],
+                expenses: []
+            });
+        }
+
+        // Persist only due_list and summary.
+        // Current-day revenue, expenses, and other fields remain unchanged.
+        const result = await dailyTransactionsCollection.updateOne(
+            { _id: daily._id },
+            {
+                $set: {
+                    due_list: nextDaily.due_list,
+                    summary: nextDaily.summary
+                }
             }
+        );
+
+        return res.send({
+            success: true,
+            acknowledged: result.acknowledged,
+            remaining_due: remaining,
+            result
         });
+
+    } catch (error) {
+        console.error('Due payment error:', error);
+
+        return res.status(500).send({
+            error: 'Due payment failed.',
+            details: error.message
+        });
+    }
+});
 
         /* =========================================================
            DELETE SUMMARY DATE RANGE
